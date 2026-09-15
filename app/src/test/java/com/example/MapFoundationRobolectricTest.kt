@@ -54,8 +54,11 @@ class MapFoundationRobolectricTest {
   @Test
   fun `test map provider info and credential status`() {
     assertEquals("NOT_REQUIRED", MapProviderInfo.CREDENTIAL_STATUS)
+    assertEquals("osmdroid", MapProviderInfo.MAP_ENGINE)
+    assertEquals("Esri World Imagery", MapProviderInfo.TILE_PROVIDER)
+    assertEquals("SATELLITE_ESRI", MapProviderInfo.DEFAULT_LAYER)
     assertTrue(MapProviderInfo.PROVIDER_NAME.contains("osmdroid"))
-    assertTrue(MapProviderInfo.TILE_SOURCE.contains("OpenStreetMap"))
+    assertTrue(MapProviderInfo.TILE_SOURCE.contains("Esri World Imagery"))
     assertTrue(MapProviderInfo.ZERO_FIRE_MARKERS_POLICY.contains("ZERO-DUMMY", ignoreCase = true))
   }
 
@@ -109,7 +112,7 @@ class MapFoundationRobolectricTest {
     val state = DashboardState()
 
     // Map foundation fields must be present
-    assertEquals(MapStatus.MAP_READY, state.mapStatus)
+    assertEquals(MapStatus.MAP_LOADING, state.mapStatus)
     assertEquals(MapProviderInfo.PROVIDER_NAME, state.mapProviderName)
     assertEquals("NOT_REQUIRED", state.mapCredentialStatus)
 

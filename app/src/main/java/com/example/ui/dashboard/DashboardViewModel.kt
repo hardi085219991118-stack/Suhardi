@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
 import com.example.core.fire.NasaFirmsConstants
+import com.example.ui.map.MapStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -44,16 +45,25 @@ class DashboardViewModel(
   }
   private val localTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
+  private var isTileValidationInProgress = false
+
   init {
     combine(
       locationTracker.locationStatus,
       locationTracker.currentLocation,
       locationTracker.errorMessage
     ) { status, location, errorMsg ->
-      _uiState.value = _uiState.value.copy(
+      val current = _uiState.value
+      val filtered = com.example.core.fire.HotspotFilterHelper.filterRecords(
+        records = current.fireRecords,
+        criteria = current.filterCriteria,
+        deviceLocation = location
+      )
+      _uiState.value = current.copy(
         locationStatus = status,
         deviceLocation = location,
-        locationErrorMessage = errorMsg
+        locationErrorMessage = errorMsg,
+        filteredFireRecords = filtered
       )
     }.launchIn(viewModelScope)
 
@@ -71,6 +81,52 @@ class DashboardViewModel(
         refreshFireData(force = false)
       }
     }
+
+    validateMapTiles()
+  }
+
+  fun validateMapTiles(layer: com.example.core.map.BaseMapLayer = _uiState.value.activeBaseMapLayer) {
+    if (isTileValidationInProgress) return
+    isTileValidationInProgress = true
+    viewModelScope.launch {
+      _uiState.value = _uiState.value.copy(mapStatus = MapStatus.MAP_LOADING, activeBaseMapLayer = layer)
+      val result = com.example.core.map.MapTileValidator.validateTileSource(layer)
+      result.fold(
+        onSuccess = {
+          _uiState.value = _uiState.value.copy(mapStatus = MapStatus.MAP_READY, activeBaseMapLayer = layer)
+        },
+        onFailure = {
+          _uiState.value = _uiState.value.copy(mapStatus = MapStatus.MAP_ERROR, activeBaseMapLayer = layer)
+        }
+      )
+      isTileValidationInProgress = false
+    }
+  }
+
+  fun setMapStatus(status: MapStatus, layer: com.example.core.map.BaseMapLayer = _uiState.value.activeBaseMapLayer) {
+    _uiState.value = _uiState.value.copy(mapStatus = status, activeBaseMapLayer = layer)
+  }
+
+  fun updateFilterCriteria(criteria: HotspotFilterCriteria) {
+    val current = _uiState.value
+    val validatedCriteria = if (current.deviceLocation == null || current.locationStatus != LocationStatus.LOCATION_AVAILABLE) {
+      criteria.copy(maxDistanceKm = null)
+    } else {
+      criteria
+    }
+    val filtered = com.example.core.fire.HotspotFilterHelper.filterRecords(
+      records = current.fireRecords,
+      criteria = validatedCriteria,
+      deviceLocation = current.deviceLocation
+    )
+    _uiState.value = current.copy(
+      filterCriteria = validatedCriteria,
+      filteredFireRecords = filtered
+    )
+  }
+
+  fun resetFilterCriteria() {
+    updateFilterCriteria(HotspotFilterCriteria())
   }
 
   private fun mapFireResponseToUiState(
@@ -349,7 +405,16 @@ class DashboardViewModel(
       "BELUM TERSEDIA"
     }
 
+    val currentCriteria = current.filterCriteria
+    val filtered = com.example.core.fire.HotspotFilterHelper.filterRecords(
+      records = newState.fireRecords,
+      criteria = currentCriteria,
+      deviceLocation = current.deviceLocation
+    )
+
     _uiState.value = newState.copy(
+      filterCriteria = currentCriteria,
+      filteredFireRecords = filtered,
       liveVerificationGate = auditResult.gate,
       diagnosticCause = auditResult.cause,
       diagnosticDetail = auditResult.detail,

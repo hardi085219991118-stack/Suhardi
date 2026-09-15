@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.core.location.LocationStatus
 import com.example.core.share.FireHotspotShareHelper
+import com.example.ui.theme.StatusBlocked
 import com.example.ui.theme.StatusNotStarted
 import com.example.ui.theme.StatusVerified
 
@@ -236,11 +237,33 @@ private fun RingkasanTabContent(state: DashboardState) {
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
+        val (mapSubtitle, mapBadge, mapColor) = when (state.mapStatus) {
+          com.example.ui.map.MapStatus.MAP_LOADING -> {
+            val text = if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
+              "Peta jalan sedang dimuat..."
+            else
+              "Citra satelit sedang dimuat..."
+            Triple(text, "MEMUAT", StatusNotStarted)
+          }
+          com.example.ui.map.MapStatus.MAP_READY -> {
+            if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
+              Triple("Peta jalan tersedia — citra satelit tidak tersedia", "PETA JALAN", StatusVerified)
+            else
+              Triple("Citra satelit siap digunakan", "TERSEDIA", StatusVerified)
+          }
+          com.example.ui.map.MapStatus.MAP_ERROR -> {
+            val text = if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
+              "Peta jalan tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
+            else
+              "Peta satelit tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
+            Triple(text, "GAGAL", StatusBlocked)
+          }
+        }
         StatusItemRow(
           title = "Peta Geografis",
-          subtitle = "Siap digunakan",
-          badgeText = "Siap",
-          badgeColor = StatusVerified
+          subtitle = mapSubtitle,
+          badgeText = mapBadge,
+          badgeColor = mapColor
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 

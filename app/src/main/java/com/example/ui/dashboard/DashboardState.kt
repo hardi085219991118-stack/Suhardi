@@ -24,14 +24,19 @@ data class DashboardState(
   val systemDetail: String = "Fondasi sistem, integrasi lokasi Android runtime (FIRE-004), Peta Geografis (FIRE-005), & Pipeline Data Satelit NASA FIRMS (FIRE-006..008) aktif secara dinamis.",
 
   // Map Foundation State (FIRE-005)
-  val mapStatus: MapStatus = MapStatus.MAP_READY,
+  val mapStatus: MapStatus = MapStatus.MAP_LOADING,
   val mapProviderName: String = MapProviderInfo.PROVIDER_NAME,
   val mapCredentialStatus: String = MapProviderInfo.CREDENTIAL_STATUS,
+  val activeBaseMapLayer: com.example.core.map.BaseMapLayer = com.example.core.map.BaseMapLayer.SATELLITE_ESRI,
 
   // Location State (FIRE-004)
   val locationStatus: LocationStatus = LocationStatus.LOCATION_PERMISSION_REQUIRED,
   val deviceLocation: DeviceLocation? = null,
   val locationErrorMessage: String? = null,
+
+  // Filter & Hotspot Records (Single Source of Truth)
+  val filterCriteria: HotspotFilterCriteria = HotspotFilterCriteria(),
+  val filteredFireRecords: List<com.example.core.fire.FireDataRecord> = emptyList(),
 
   // Fire Data State (FIRE-006 - Real Fire Data Source)
   val fireDataState: DataState = DataState.NOT_VERIFIED,

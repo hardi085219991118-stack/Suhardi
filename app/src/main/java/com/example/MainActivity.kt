@@ -47,6 +47,15 @@ class MainActivity : ComponentActivity() {
           },
           onSetMapKey = { key ->
             viewModel.setMapKey(key)
+          },
+          onUpdateFilterCriteria = { criteria ->
+            viewModel.updateFilterCriteria(criteria)
+          },
+          onResetFilterCriteria = {
+            viewModel.resetFilterCriteria()
+          },
+          onMapStatusChanged = { status, layer ->
+            viewModel.setMapStatus(status, layer)
           }
         )
       }

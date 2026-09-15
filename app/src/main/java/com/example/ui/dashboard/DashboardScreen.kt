@@ -94,7 +94,10 @@ fun DashboardScreen(
   onRequestPermission: () -> Unit = {},
   onRefreshLocation: () -> Unit = {},
   onRefreshSatellite: () -> Unit = {},
-  onSetMapKey: (String?) -> Unit = {}
+  onSetMapKey: (String?) -> Unit = {},
+  onUpdateFilterCriteria: (HotspotFilterCriteria) -> Unit = {},
+  onResetFilterCriteria: () -> Unit = {},
+  onMapStatusChanged: (MapStatus, com.example.core.map.BaseMapLayer) -> Unit = { _, _ -> }
 ) {
   val context = LocalContext.current
   var currentTab by remember { mutableStateOf(AppBottomNavTab.BERANDA) }
@@ -102,7 +105,6 @@ fun DashboardScreen(
   var showMapScreen by remember { mutableStateOf(false) }
   var showMyLocationScreen by remember { mutableStateOf(false) }
   var showFilterDialog by remember { mutableStateOf(false) }
-  var filterCriteria by remember { mutableStateOf(HotspotFilterCriteria()) }
   var selectedHotspotForDetail by remember { mutableStateOf<com.example.core.fire.FireDataRecord?>(null) }
 
   var showKeyDialog by remember { mutableStateOf(false) }
@@ -208,8 +210,9 @@ fun DashboardScreen(
   // Filter Hotspots Dialog (Screen 4)
   if (showFilterDialog) {
     FilterHotspotsDialog(
-      currentCriteria = filterCriteria,
-      onApplyCriteria = { filterCriteria = it },
+      currentCriteria = state.filterCriteria,
+      isGpsAvailable = state.locationStatus == LocationStatus.LOCATION_AVAILABLE && state.deviceLocation != null,
+      onApplyCriteria = { onUpdateFilterCriteria(it) },
       onDismiss = { showFilterDialog = false }
     )
   }
@@ -220,7 +223,12 @@ fun DashboardScreen(
       deviceLocation = state.deviceLocation,
       locationStatus = state.locationStatus,
       locationErrorMessage = state.locationErrorMessage,
-      fireRecords = state.fireRecords,
+      fireRecords = if (state.filteredFireRecords.isNotEmpty() || state.fireRecords.isEmpty()) state.filteredFireRecords else state.fireRecords,
+      totalFireRecordsCount = state.fireRecords.size,
+      filterCriteria = state.filterCriteria,
+      onOpenFilter = { showFilterDialog = true },
+      onResetFilter = onResetFilterCriteria,
+      onMapStatusChanged = onMapStatusChanged,
       fireDataSourceState = state.fireDataSourceState,
       onBackToDashboard = { showMapScreen = false },
       onRefreshLocation = onRefreshLocation,
@@ -401,7 +409,12 @@ fun DashboardScreen(
           deviceLocation = state.deviceLocation,
           locationStatus = state.locationStatus,
           locationErrorMessage = state.locationErrorMessage,
-          fireRecords = state.fireRecords,
+          fireRecords = if (state.filteredFireRecords.isNotEmpty() || state.fireRecords.isEmpty()) state.filteredFireRecords else state.fireRecords,
+          totalFireRecordsCount = state.fireRecords.size,
+          filterCriteria = state.filterCriteria,
+          onOpenFilter = { showFilterDialog = true },
+          onResetFilter = onResetFilterCriteria,
+          onMapStatusChanged = onMapStatusChanged,
           fireDataSourceState = state.fireDataSourceState,
           onBackToDashboard = { currentTab = AppBottomNavTab.BERANDA },
           onRefreshLocation = onRefreshLocation,
@@ -423,8 +436,8 @@ fun DashboardScreen(
           state = state,
           onSelectRecord = { selectedHotspotForDetail = it },
           onOpenFilter = { showFilterDialog = true },
-          filterCriteria = filterCriteria,
-          onResetFilter = { filterCriteria = HotspotFilterCriteria() },
+          filterCriteria = state.filterCriteria,
+          onResetFilter = onResetFilterCriteria,
           modifier = Modifier.padding(innerPadding)
         )
       }

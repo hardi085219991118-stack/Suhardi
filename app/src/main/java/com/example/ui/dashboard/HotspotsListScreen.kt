@@ -75,24 +75,16 @@ fun HotspotsListScreen(
   var sortOrder by remember { mutableStateOf(HotspotSortOrder.TERBARU) }
   var showSortDropdown by remember { mutableStateOf(false) }
 
-  // Filter records
-  val filteredRecords = remember(state.fireRecords, filterCriteria, state.deviceLocation) {
-    state.fireRecords.filter { record ->
-      // Satellite filter
-      val matchesSat = filterCriteria.satellite == null || record.satellite.equals(filterCriteria.satellite, ignoreCase = true)
-
-      // Distance filter
-      val matchesDist = if (filterCriteria.maxDistanceKm != null && state.deviceLocation != null) {
-        val dist = FireHotspotShareHelper.calculateDistanceKm(
-          state.deviceLocation.latitude,
-          state.deviceLocation.longitude,
-          record.latitude,
-          record.longitude
-        )
-        dist <= filterCriteria.maxDistanceKm
-      } else true
-
-      matchesSat && matchesDist
+  // Filter records using single source of truth or HotspotFilterHelper
+  val filteredRecords = remember(state.filteredFireRecords, state.fireRecords, filterCriteria, state.deviceLocation) {
+    if (state.filteredFireRecords.isNotEmpty() || state.fireRecords.isEmpty()) {
+      state.filteredFireRecords
+    } else {
+      com.example.core.fire.HotspotFilterHelper.filterRecords(
+        records = state.fireRecords,
+        criteria = filterCriteria,
+        deviceLocation = state.deviceLocation
+      )
     }
   }
 
@@ -119,6 +111,13 @@ fun HotspotsListScreen(
   }
 
   val isFiltered = filterCriteria.maxDistanceKm != null || filterCriteria.satellite != null || filterCriteria.maxAgeHours != null
+  val totalCount = state.fireRecords.size
+  val filteredCount = sortedRecords.size
+  val indicatorText = if (isFiltered) {
+    "Menampilkan $filteredCount dari $totalCount titik panas"
+  } else {
+    "Menampilkan $totalCount titik panas"
+  }
 
   Scaffold(
     modifier = modifier
@@ -133,9 +132,9 @@ fun HotspotsListScreen(
               style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
             )
             Text(
-              text = "Total ${sortedRecords.size} titik panas terdeteksi",
+              text = indicatorText,
               style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
+              color = if (isFiltered) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         },
@@ -212,7 +211,7 @@ fun HotspotsListScreen(
 
         if (isFiltered) {
           TextButton(onClick = onResetFilter) {
-            Text("Reset Filter ✕", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            Text("Atur Ulang Penyaring ✕", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
           }
         }
       }
@@ -233,14 +232,14 @@ fun HotspotsListScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-              text = if (state.fireRecords.isEmpty()) "Belum ada titik panas yang terdeteksi." else "Tidak ada titik panas yang memenuhi kriteria filter.",
+              text = if (state.fireRecords.isEmpty()) "Belum ada titik panas yang terdeteksi." else "Tidak ada titik panas yang sesuai dengan penyaring.",
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (isFiltered) {
               Spacer(modifier = Modifier.height(12.dp))
               OutlinedButton(onClick = onResetFilter) {
-                Text("Hapus Filter")
+                Text("Atur Ulang Penyaring")
               }
             }
           }

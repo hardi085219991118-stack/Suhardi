@@ -52,59 +52,21 @@ class ClientOnlyCredentialProvider(
   }
 
   override val limitationNote: String =
-    "CLIENT_ONLY_LIMITATION: Aplikasi berjalan murni pada sisi klien Android tanpa perantara backend/KMS. Secret produksi tidak disimpan dalam APK."
+    "PENYIMPANAN LOKAL: Disimpan pada SharedPreferences lokal perangkat (MODE_PRIVATE). Bukan penyimpanan rahasia/KMS terenkripsi. Kredensial berasal murni dari input pengguna saat runtime."
 
   private var inMemoryKey: String? = null
   private var isMarkedInvalid: Boolean = false
 
   init {
     val savedKey = sharedPreferences?.getString(KEY_FIRMS_MAP_KEY, null)
-    if (savedKey != null) {
-      if (savedKey.isNotBlank()) {
-        inMemoryKey = savedKey.trim()
-      }
-    } else {
-      // Priority 2: Local test configuration via BuildConfig (TEST_CREDENTIAL_ONLY)
-      val buildConfigKey = try {
-        com.example.BuildConfig.FIRMS_MAP_KEY
-      } catch (_: Throwable) {
-        null
-      }
-      if (!buildConfigKey.isNullOrBlank() && isValidFormat(buildConfigKey.trim()) && !buildConfigKey.startsWith("your_", ignoreCase = true)) {
-        inMemoryKey = buildConfigKey.trim()
-      } else {
-        val assetKey = try {
-          val props = java.util.Properties()
-          var loaded = false
-          if (context != null) {
-            try {
-              context.assets.open("test_credentials.properties").use { props.load(it) }
-              loaded = true
-            } catch (_: Throwable) {}
-          }
-          if (!loaded) {
-            val stream = javaClass.classLoader?.getResourceAsStream("test_credentials.properties")
-            if (stream != null) {
-              stream.use { props.load(it) }
-              loaded = true
-            }
-          }
-          if (!loaded) {
-            val fileCandidates = listOf(
-              java.io.File("src/main/assets/test_credentials.properties"),
-              java.io.File("app/src/main/assets/test_credentials.properties")
-            )
-            fileCandidates.firstOrNull { it.exists() }?.inputStream()?.use { props.load(it) }
-          }
-          props.getProperty("FIRMS_MAP_KEY", "")
-        } catch (_: Throwable) {
-          null
-        }
-        if (!assetKey.isNullOrBlank() && isValidFormat(assetKey.trim())) {
-          inMemoryKey = assetKey.trim()
-        }
-      }
+    if (!savedKey.isNullOrBlank()) {
+      inMemoryKey = savedKey.trim()
     }
+  }
+
+  fun getMaskedMapKey(): String {
+    val key = getMapKey() ?: return ""
+    return if (key.length <= 4) "••••" else "••••••••"
   }
 
   override fun getCredentialState(): FireDataCredentialState {

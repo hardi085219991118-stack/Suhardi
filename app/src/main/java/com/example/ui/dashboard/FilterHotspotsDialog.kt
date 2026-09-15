@@ -54,10 +54,11 @@ data class HotspotFilterCriteria(
 @Composable
 fun FilterHotspotsDialog(
   currentCriteria: HotspotFilterCriteria,
+  isGpsAvailable: Boolean = true,
   onApplyCriteria: (HotspotFilterCriteria) -> Unit,
   onDismiss: () -> Unit
 ) {
-  var selectedDistance by remember { mutableStateOf(currentCriteria.maxDistanceKm) }
+  var selectedDistance by remember { mutableStateOf(if (isGpsAvailable) currentCriteria.maxDistanceKm else null) }
   var selectedSatellite by remember { mutableStateOf(currentCriteria.satellite) }
   var selectedAgeHours by remember { mutableStateOf(currentCriteria.maxAgeHours) }
 
@@ -106,13 +107,36 @@ fun FilterHotspotsDialog(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 1. Jarak dari lokasi saya
-        Text(
-          text = "Jarak dari lokasi saya",
-          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-          color = Color(0xFFFF7043)
-        )
+        // 1. Jarak
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = "Jarak",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = Color(0xFFFF7043)
+          )
+          if (!isGpsAvailable) {
+            Text(
+              text = "GPS Tidak Tersedia",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.error,
+              fontWeight = FontWeight.Bold
+            )
+          }
+        }
         Spacer(modifier = Modifier.height(6.dp))
+
+        if (!isGpsAvailable) {
+          Text(
+            text = "Filter jarak membutuhkan lokasi perangkat.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(bottom = 6.dp)
+          )
+        }
 
         val distanceOptions = listOf(
           null to "Semua jarak",
@@ -122,21 +146,24 @@ fun FilterHotspotsDialog(
           50.0 to "Sampai 50 km"
         )
         distanceOptions.forEach { (dist, label) ->
+          val isEnabled = isGpsAvailable || dist == null
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .clickable { selectedDistance = dist }
+              .clickable(enabled = isEnabled) { if (isEnabled) selectedDistance = dist }
               .padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             RadioButton(
               selected = selectedDistance == dist,
-              onClick = { selectedDistance = dist },
+              onClick = { if (isEnabled) selectedDistance = dist },
+              enabled = isEnabled,
               colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFFF5722))
             )
             Text(
               text = label,
               style = MaterialTheme.typography.bodyMedium,
+              color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
               modifier = Modifier.padding(start = 8.dp)
             )
           }
@@ -159,7 +186,7 @@ fun FilterHotspotsDialog(
           "NOAA-21" to "NOAA-21",
           "NOAA-20" to "NOAA-20",
           "Suomi-NPP" to "Suomi-NPP",
-          "MODIS" to "MODIS (Terra / Aqua)"
+          "MODIS" to "MODIS"
         )
         satelliteOptions.forEach { (sat, label) ->
           Row(
@@ -186,19 +213,19 @@ fun FilterHotspotsDialog(
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
         Spacer(modifier = Modifier.height(12.dp))
 
-        // 3. Waktu Data
+        // 3. Usia Data
         Text(
-          text = "Waktu data",
+          text = "Usia Data",
           style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
           color = Color(0xFFFF7043)
         )
         Spacer(modifier = Modifier.height(6.dp))
 
         val ageOptions = listOf(
-          null to "Semua data",
-          6 to "Kurang dari 6 jam",
-          12 to "Kurang dari 12 jam",
-          24 to "Kurang dari 24 jam"
+          null to "Semua waktu",
+          6 to "< 6 jam",
+          12 to "< 12 jam",
+          24 to "< 24 jam"
         )
         ageOptions.forEach { (age, label) ->
           Row(
@@ -228,7 +255,7 @@ fun FilterHotspotsDialog(
           onClick = {
             onApplyCriteria(
               HotspotFilterCriteria(
-                maxDistanceKm = selectedDistance,
+                maxDistanceKm = if (isGpsAvailable) selectedDistance else null,
                 satellite = selectedSatellite,
                 maxAgeHours = selectedAgeHours
               )
@@ -242,7 +269,7 @@ fun FilterHotspotsDialog(
           colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
           shape = RoundedCornerShape(12.dp)
         ) {
-          Text("Tampilkan Hasil", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+          Text("Terapkan Penyaring", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -259,7 +286,7 @@ fun FilterHotspotsDialog(
             .fillMaxWidth()
             .testTag("reset_filter_button")
         ) {
-          Text("Atur Ulang", color = MaterialTheme.colorScheme.onSurfaceVariant)
+          Text("Atur Ulang Penyaring", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
     }

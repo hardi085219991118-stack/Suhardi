@@ -22,20 +22,6 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-    val envProps = Properties()
-    val rootEnv = rootProject.file(".env")
-    if (rootEnv.exists()) {
-      rootEnv.inputStream().use { stream -> envProps.load(stream) }
-    }
-    val testCredsFile = file("src/main/assets/test_credentials.properties")
-    if (testCredsFile.exists()) {
-      testCredsFile.inputStream().use { stream -> envProps.load(stream) }
-    }
-    val firmsKey = System.getenv("FIRMS_MAP_KEY")
-      ?: (project.findProperty("FIRMS_MAP_KEY") as? String)
-      ?: envProps.getProperty("FIRMS_MAP_KEY", "")
-    buildConfigField("String", "FIRMS_MAP_KEY", "\"$firmsKey\"")
   }
 
   signingConfigs {
@@ -84,7 +70,6 @@ secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
-  ignoreList.add("FIRMS_MAP_KEY")
 }
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }

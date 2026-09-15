@@ -86,6 +86,7 @@ import com.example.ui.theme.StatusBlocked
 import com.example.ui.theme.StatusNotStarted
 import com.example.ui.theme.StatusVerified
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.DropdownMenu
@@ -93,6 +94,7 @@ import androidx.compose.material3.DropdownMenuItem
 import com.example.core.fire.FireDataAgeCalculator
 import com.example.core.fire.FireDataRecord
 import com.example.core.fire.FireDataSourceState
+import com.example.ui.dashboard.HotspotFilterCriteria
 import com.example.core.map.BaseMapLayer
 import com.example.core.map.MapTileProviderFactory
 import org.osmdroid.config.Configuration
@@ -122,6 +124,11 @@ fun MapScreen(
   locationStatus: LocationStatus = LocationStatus.LOCATION_PERMISSION_REQUIRED,
   locationErrorMessage: String? = null,
   fireRecords: List<FireDataRecord> = emptyList(),
+  totalFireRecordsCount: Int = fireRecords.size,
+  filterCriteria: HotspotFilterCriteria = HotspotFilterCriteria(),
+  onOpenFilter: () -> Unit = {},
+  onResetFilter: () -> Unit = {},
+  onMapStatusChanged: (MapStatus, BaseMapLayer) -> Unit = { _, _ -> },
   fireDataSourceState: FireDataSourceState = FireDataSourceState.NOT_VERIFIED,
   onBackToDashboard: () -> Unit = {},
   onRefreshLocation: () -> Unit = {},
@@ -133,6 +140,7 @@ fun MapScreen(
   // State inisialisasi peta
   var mapStatus by remember { mutableStateOf(MapStatus.MAP_LOADING) }
   var mapErrorMessage by remember { mutableStateOf<String?>(null) }
+  var tileRetryKey by remember { mutableStateOf(0) }
   var mapViewRef by remember { mutableStateOf<MapView?>(null) }
   var hasInitialCentered by remember { mutableStateOf(false) }
   var selectedBaseMapLayer by remember { mutableStateOf(BaseMapLayer.SATELLITE_ESRI) }
@@ -140,7 +148,7 @@ fun MapScreen(
   var selectedFireRecord by remember { mutableStateOf<FireDataRecord?>(null) }
   var showLocationDetails by remember { mutableStateOf(false) }
 
-  // Marker performance cache (BUG 7)
+  // Marker performance cache
   var lastUserLocationFingerprint by remember { mutableStateOf<Int?>(null) }
   var lastFireDataFingerprint by remember { mutableStateOf<Int?>(null) }
   var cachedUserMarker by remember { mutableStateOf<Marker?>(null) }
@@ -163,14 +171,11 @@ fun MapScreen(
         context.getSharedPreferences("osmdroid_prefs", Context.MODE_PRIVATE)
       )
       Configuration.getInstance().userAgentValue = context.packageName
-      mapStatus = MapStatus.MAP_READY
     } catch (e: Throwable) {
-      mapStatus = MapStatus.MAP_ERROR
-      mapErrorMessage = "Gagal inisialisasi peta: ${e.message}"
       AppLogger.recordError(
         AppError(
           type = ErrorType.UNKNOWN_ERROR,
-          message = "Gagal inisialisasi peta osmdroid: ${e.message}",
+          message = "Gagal konfigurasi osmdroid: ${e.message}",
           source = "MapScreen.DisposableEffect",
           recoveryAction = "Periksa permission dan konfigurasi osmdroid",
           cause = e
@@ -181,6 +186,40 @@ fun MapScreen(
     onDispose {
       mapViewRef?.onDetach()
     }
+  }
+
+  // Validasi tile nyata sebelum menetapkan MAP_READY (A1, A2, A4, A5)
+  LaunchedEffect(selectedBaseMapLayer, tileRetryKey) {
+    mapStatus = MapStatus.MAP_LOADING
+    onMapStatusChanged(MapStatus.MAP_LOADING, selectedBaseMapLayer)
+    mapErrorMessage = null
+
+    val centerLat = deviceLocation?.latitude ?: fireRecords.firstOrNull()?.latitude ?: -2.5
+    val centerLon = deviceLocation?.longitude ?: fireRecords.firstOrNull()?.longitude ?: 114.0
+    val zoom = if (deviceLocation != null) 14 else if (fireRecords.isNotEmpty()) 10 else 5
+
+    val result = com.example.core.map.MapTileValidator.validateTileForViewport(
+      layer = selectedBaseMapLayer,
+      latitude = centerLat,
+      longitude = centerLon,
+      zoom = zoom
+    )
+    result.fold(
+      onSuccess = {
+        mapStatus = MapStatus.MAP_READY
+        mapErrorMessage = null
+        onMapStatusChanged(MapStatus.MAP_READY, selectedBaseMapLayer)
+      },
+      onFailure = { error ->
+        mapStatus = MapStatus.MAP_ERROR
+        mapErrorMessage = error.message ?: if (selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP) {
+          "Peta jalan tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
+        } else {
+          "Peta satelit tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
+        }
+        onMapStatusChanged(MapStatus.MAP_ERROR, selectedBaseMapLayer)
+      }
+    )
   }
 
   // Efek perpindahan kamera saat lokasi pertama kali tersedia (Section 10)
@@ -206,6 +245,13 @@ fun MapScreen(
     }
   }
 
+  val isFiltered = filterCriteria.maxDistanceKm != null || filterCriteria.satellite != null || filterCriteria.maxAgeHours != null
+  val indicatorText = if (isFiltered) {
+    "Menampilkan ${fireRecords.size} dari $totalFireRecordsCount titik panas"
+  } else {
+    "Menampilkan ${fireRecords.size} titik panas"
+  }
+
   Scaffold(
     modifier = modifier
       .fillMaxSize()
@@ -220,9 +266,10 @@ fun MapScreen(
               modifier = Modifier.testTag("map_screen_title")
             )
             Text(
-              text = "Citra Satelit – NASA FIRMS",
+              text = indicatorText,
               style = MaterialTheme.typography.labelSmall.copy(
-                color = MaterialTheme.colorScheme.primary
+                color = if (isFiltered) Color(0xFFFF5722) else MaterialTheme.colorScheme.primary,
+                fontWeight = if (isFiltered) FontWeight.Bold else FontWeight.Normal
               ),
               modifier = Modifier.testTag("map_provider_info_text")
             )
@@ -240,6 +287,16 @@ fun MapScreen(
           }
         },
         actions = {
+          IconButton(
+            onClick = onOpenFilter,
+            modifier = Modifier.testTag("map_filter_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.FilterList,
+              contentDescription = "Penyaring",
+              tint = if (isFiltered) Color(0xFFFF5722) else MaterialTheme.colorScheme.onSurface
+            )
+          }
           Box {
             IconButton(
               onClick = { showLayerMenu = true },
@@ -345,35 +402,88 @@ fun MapScreen(
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      // 1. Tampilan Native MapView atau Error Fallback
+      // 1. Tampilan Native MapView atau Error / Loading Fallback
       if (mapStatus == MapStatus.MAP_ERROR) {
         Box(
           modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
-            .padding(16.dp),
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(24.dp),
           contentAlignment = Alignment.Center
         ) {
           Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
           ) {
             Icon(
               imageVector = Icons.Default.Warning,
               contentDescription = null,
               tint = MaterialTheme.colorScheme.error,
-              modifier = Modifier.size(48.dp)
+              modifier = Modifier.size(52.dp)
             )
+            val errorTitle = if (selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP) {
+              "Peta jalan tidak dapat dimuat."
+            } else {
+              "Peta satelit tidak dapat dimuat."
+            }
             Text(
-              text = "MAP INITIALIZATION ERROR",
+              text = errorTitle,
               style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
               color = MaterialTheme.colorScheme.error,
               modifier = Modifier.testTag("map_error_title")
             )
             Text(
-              text = mapErrorMessage ?: "Gagal memuat provider peta osmdroid.",
+              text = "Periksa koneksi internet lalu coba lagi.",
               style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onErrorContainer
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.testTag("map_error_subtitle")
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              Button(
+                onClick = { tileRetryKey++ },
+                modifier = Modifier.testTag("retry_tile_button")
+              ) {
+                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Coba Lagi")
+              }
+              if (selectedBaseMapLayer == BaseMapLayer.SATELLITE_ESRI) {
+                OutlinedButton(
+                  onClick = {
+                    selectedBaseMapLayer = BaseMapLayer.OPEN_STREET_MAP
+                    mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(BaseMapLayer.OPEN_STREET_MAP))
+                    tileRetryKey++
+                  },
+                  modifier = Modifier.testTag("fallback_osm_button")
+                ) {
+                  Text("Gunakan Peta Jalan (OSM)")
+                }
+              }
+            }
+          }
+        }
+      } else if (mapStatus == MapStatus.MAP_LOADING) {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface),
+          contentAlignment = Alignment.Center
+        ) {
+          Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+          ) {
+            CircularProgressIndicator(modifier = Modifier.size(44.dp))
+            val loadingMsg = if (selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP) {
+              "Peta jalan sedang dimuat..."
+            } else {
+              "Citra satelit sedang dimuat..."
+            }
+            Text(
+              text = loadingMsg,
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
@@ -386,7 +496,6 @@ fun MapScreen(
                 setTileSource(MapTileProviderFactory.getTileSource(selectedBaseMapLayer))
                 setMultiTouchControls(true)
                 controller.setZoom(5.0) // Neutral default world view before GPS fix
-                mapStatus = MapStatus.MAP_READY
                 mapViewRef = this
               }
             } catch (e: Throwable) {
@@ -406,6 +515,12 @@ fun MapScreen(
           },
           update = { mv ->
             if (mv is MapView) {
+              // Update Tile Source if changed
+              val expectedSource = MapTileProviderFactory.getTileSource(selectedBaseMapLayer)
+              if (mv.tileProvider.tileSource.name() != expectedSource.name()) {
+                mv.setTileSource(expectedSource)
+              }
+
               // 1. User Location Marker Fingerprint & Update
               val currentUserFingerprint = if (locationStatus == LocationStatus.LOCATION_AVAILABLE &&
                 deviceLocation != null &&
@@ -455,19 +570,23 @@ fun MapScreen(
                 lastUserLocationFingerprint = currentUserFingerprint
               }
 
-              // 2. Verified Satellite Hotspot Markers Fingerprint & Update (FIRE-008, BUG 7)
+              // 2. Verified Satellite Hotspot Markers Fingerprint & Update
+              // Audit Point 9: Identitas stabil dari seluruh record (lat, lon, acqTime, sat, inst)
               val isLiveOrCached = fireDataSourceState == FireDataSourceState.DATA_SOURCE_AVAILABLE ||
                 (fireDataSourceState == FireDataSourceState.CACHED && fireRecords.isNotEmpty())
 
               val currentFireFingerprint = if (isLiveOrCached) {
-                java.util.Objects.hash(
-                  fireDataSourceState,
-                  fireRecords.size,
-                  fireRecords.firstOrNull()?.latitude,
-                  fireRecords.firstOrNull()?.longitude,
-                  fireRecords.lastOrNull()?.latitude,
-                  fireRecords.lastOrNull()?.longitude
-                )
+                var hash = 17
+                hash = 31 * hash + fireDataSourceState.hashCode()
+                hash = 31 * hash + fireRecords.size
+                for (fire in fireRecords) {
+                  hash = 31 * hash + fire.latitude.hashCode()
+                  hash = 31 * hash + fire.longitude.hashCode()
+                  hash = 31 * hash + (fire.acquisitionTimestampMillis?.hashCode() ?: 0)
+                  hash = 31 * hash + fire.satellite.hashCode()
+                  hash = 31 * hash + fire.instrument.hashCode()
+                }
+                hash
               } else {
                 0
               }
@@ -527,6 +646,7 @@ fun MapScreen(
       // 2. Status Bar Atas (Status Peta & Status Lokasi)
       MapStatusBar(
         mapStatus = mapStatus,
+        activeLayer = selectedBaseMapLayer,
         locationStatus = locationStatus,
         isValidCoordinate = validationResult.isValid,
         modifier = Modifier
@@ -560,8 +680,13 @@ fun MapScreen(
                 .clip(CircleShape)
                 .background(Color(0xFFFF5722))
             )
+            val legendHotspotLabel = if (isFiltered) {
+              "🔥 Titik Panas (${fireRecords.size}/$totalFireRecordsCount)"
+            } else {
+              "🔥 Titik Panas (${fireRecords.size})"
+            }
             Text(
-              text = "🔥 Titik Panas (${fireRecords.size})",
+              text = legendHotspotLabel,
               style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
             )
           }
@@ -579,6 +704,15 @@ fun MapScreen(
               text = "📍 Lokasi Saya",
               style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
             )
+          }
+          if (isFiltered) {
+            TextButton(
+              onClick = onResetFilter,
+              contentPadding = PaddingValues(0.dp),
+              modifier = Modifier.height(24.dp)
+            ) {
+              Text("Atur Ulang Penyaring ✕", color = MaterialTheme.colorScheme.error, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
           }
         }
       }
@@ -622,11 +756,20 @@ fun MapScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            // 🔥 Semua Titik Panas
+            // 🔥 Semua Titik Panas (B8, B9)
             FilledTonalButton(
               onClick = {
                 val validFires = fireRecords.filter { CoordinateValidator.isValid(it.latitude, it.longitude) }
-                if (validFires.isNotEmpty()) {
+                if (validFires.isEmpty()) {
+                  val msg = if (isFiltered) "Tidak ada titik panas yang sesuai dengan penyaring." else "Belum ada titik panas untuk difokuskan."
+                  android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                } else if (validFires.size == 1) {
+                  val single = validFires.first()
+                  mapViewRef?.let { mv ->
+                    mv.controller.setZoom(15.0)
+                    mv.controller.animateTo(GeoPoint(single.latitude, single.longitude))
+                  }
+                } else {
                   mapViewRef?.let { mv ->
                     val minLat = validFires.minOf { it.latitude }
                     val maxLat = validFires.maxOf { it.latitude }
@@ -634,17 +777,21 @@ fun MapScreen(
                     val maxLon = validFires.maxOf { it.longitude }
                     val centerLat = (minLat + maxLat) / 2.0
                     val centerLon = (minLon + maxLon) / 2.0
-                    mv.controller.animateTo(GeoPoint(centerLat, centerLon))
+                    val latSpan = maxLat - minLat
+                    val lonSpan = maxLon - minLon
+                    val latPadding = maxOf(latSpan * 0.08, 0.01)
+                    val lonPadding = maxOf(lonSpan * 0.08, 0.01)
                     try {
                       mv.zoomToBoundingBox(
-                        org.osmdroid.util.BoundingBox(maxLat + 0.5, maxLon + 0.5, minLat - 0.5, minLon - 0.5),
+                        org.osmdroid.util.BoundingBox(maxLat + latPadding, maxLon + lonPadding, minLat - latPadding, minLon - lonPadding),
                         true,
                         64
                       )
-                    } catch (_: Throwable) {}
+                    } catch (_: Throwable) {
+                      mv.controller.setZoom(12.0)
+                      mv.controller.animateTo(GeoPoint(centerLat, centerLon))
+                    }
                   }
-                } else {
-                  android.widget.Toast.makeText(context, "Belum ada titik panas untuk difokuskan.", android.widget.Toast.LENGTH_SHORT).show()
                 }
               },
               contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
@@ -734,6 +881,7 @@ fun MapScreen(
 @Composable
 private fun MapStatusBar(
   mapStatus: MapStatus,
+  activeLayer: BaseMapLayer = BaseMapLayer.SATELLITE_ESRI,
   locationStatus: LocationStatus,
   isValidCoordinate: Boolean,
   modifier: Modifier = Modifier
@@ -771,11 +919,15 @@ private fun MapStatusBar(
           },
           modifier = Modifier.size(16.dp)
         )
+        val mapStatusLabel = when (mapStatus) {
+          MapStatus.MAP_READY -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Tersedia" else "Citra Satelit Siap"
+          MapStatus.MAP_ERROR -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Gagal" else "Peta Satelit Gagal"
+          MapStatus.MAP_LOADING -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Memuat Peta Jalan..." else "Memuat Citra Satelit..."
+        }
         Text(
-          text = "MAP: ${mapStatus.name}",
+          text = mapStatusLabel,
           style = MaterialTheme.typography.labelSmall.copy(
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
+            fontWeight = FontWeight.Bold
           ),
           color = when (mapStatus) {
             MapStatus.MAP_READY -> StatusVerified
@@ -811,12 +963,16 @@ private fun MapStatusBar(
           tint = locColor,
           modifier = Modifier.size(16.dp)
         )
+        val locText = when {
+          locationStatus == LocationStatus.LOCATION_AVAILABLE && !isValidCoordinate -> "KOORDINAT TIDAK VALID"
+          locationStatus == LocationStatus.LOCATION_AVAILABLE -> "GPS AKTIF"
+          locationStatus == LocationStatus.LOCATION_LOADING -> "MENCARI GPS..."
+          locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS NONAKTIF"
+          locationStatus == LocationStatus.LOCATION_PERMISSION_DENIED -> "IZIN DITOLAK"
+          else -> locationStatus.name
+        }
         Text(
-          text = if (locationStatus == LocationStatus.LOCATION_AVAILABLE && !isValidCoordinate) {
-            "INVALID COORDINATE"
-          } else {
-            locationStatus.name
-          },
+          text = locText,
           style = MaterialTheme.typography.labelSmall.copy(
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace
