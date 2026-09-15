@@ -201,8 +201,9 @@ fun DashboardScreen(
 
   // Detail Titik Panas Dialog (Screen 3)
   if (selectedHotspotForDetail != null) {
-    com.example.ui.map.FireMarkerDetailDialog(
+    HotspotDetailDialog(
       record = selectedHotspotForDetail!!,
+      userLocation = state.deviceLocation,
       onDismiss = { selectedHotspotForDetail = null }
     )
   }

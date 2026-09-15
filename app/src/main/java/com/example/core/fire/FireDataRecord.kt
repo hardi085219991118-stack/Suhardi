@@ -27,4 +27,11 @@ data class FireDataRecord(
   val dayNight: String? = null,        // "D" (Day) or "N" (Night)
   val acquisitionTimestampMillis: Long? = null, // Derived from acqDate & acqTime UTC only
   val rawLine: String? = null
-)
+) {
+  /**
+   * Deterministic identifier derived from authentic NASA FIRMS fields.
+   * Eliminates random UUIDs so markers and list items retain stable identity.
+   */
+  val deterministicId: String
+    get() = "${satellite}_${instrument}_${latitude}_${longitude}_${acqDate}_${acqTime}"
+}

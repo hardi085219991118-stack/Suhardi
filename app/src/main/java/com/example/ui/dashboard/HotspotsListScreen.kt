@@ -275,6 +275,7 @@ private fun HotspotItemCard(
   Card(
     modifier = Modifier
       .fillMaxWidth()
+      .testTag("hotspot_list_item")
       .clickable(onClick = onClick),
     shape = RoundedCornerShape(14.dp),
     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
