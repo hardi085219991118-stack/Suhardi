@@ -1,9 +1,26 @@
 # HARDI MANTANGAI FIRE NOW - Android APK Package
 
-Berkas installer Android Application Package (APK) telah di-generate secara langsung di dalam repositori file proyek ini:
+APK BUILD:
+PASS
 
-- **Lokasi Root:** `app-debug.apk` (di root proyek)
-- **Lokasi Folder APK:** `apk/app-debug.apk`
+APK FILE:
+app-debug.apk
+
+APK VALID:
+YES
+
+SIZE:
+23,386,341 bytes (22.30 MB)
+
+SHA-256:
+64b2b61ea68bf05a29a19a402107c0c4754b5497b3c6aeee71407160aa3c2b5f
+
+---
+
+### Lokasi Berkas APK
+1. **Root Proyek (Untuk Ekspor ZIP):** `app-debug.apk`
+2. **Folder APK:** `apk/app-debug.apk`
+3. **Build Output:** `app/build/outputs/apk/debug/app-debug.apk`
 
 ---
 
@@ -15,26 +32,18 @@ Berkas installer Android Application Package (APK) telah di-generate secara lang
 - **Version Name:** `1.0`
 - **Target SDK:** Android 36 (VanillaIceCream / Android 15+)
 - **Min SDK:** Android 24 (Android 7.0 Nougat)
-- **Ukuran Berkas:** ~22.3 MB (23,386,341 bytes)
-- **SHA-256 Checksum:** `724ef4659426a70791bacda8b0b738647d45934f88327c74be636a3ccf6b3486`
 
 ---
 
-### Cara Mengunduh & Memasang (Install)
-1. **Download langsung melalui File Explorer AI Studio**:
-   - Buka panel file di sebelah kiri editor.
-   - Klik kanan pada `app-debug.apk` (atau di folder `apk/app-debug.apk`).
-   - Pilih opsi **Download** untuk mengunduh ke komputer/perangkat lokal Anda.
+### Cara Mengambil Berkas APK via Ekspor Proyek
+1. **Ekspor Proyek (Download ZIP)**:
+   - Pilih menu **Export** / **Download ZIP** pada AI Studio.
+   - Buka arsip ZIP hasil download.
+   - Berkas biner **`app-debug.apk`** berada langsung di root direktori ZIP (serta di `apk/app-debug.apk`).
 
-2. **Ekspor Proyek**:
-   - Jika Anda mengekspor seluruh proyek sebagai ZIP, berkas `app-debug.apk` dan `apk/app-debug.apk` sudah tersedia langsung di dalam arsip ZIP tanpa perlu compile ulang.
+2. **Memasang (Install) ke Perangkat Android**:
+   - Salin file `app-debug.apk` ke penyimpanan HP Android Anda.
+   - Buka file manager di HP, lalu tap `app-debug.apk`.
+   - Izinkan instalasi dari sumber tidak dikenal (Unknown Sources / Install Unknown Apps) bila diminta sistem Android.
+   - Selesaikan proses instalasi dan buka aplikasi.
 
-3. **Install ke Perangkat Android Fisik**:
-   - Transfer file `app-debug.apk` ke perangkat Android Anda (melalui USB, Telegram, Google Drive, dsb.).
-   - Pastikan opsi **Install unknown apps** / **Sumber tidak dikenal** diaktifkan untuk browser/file manager perangkat Anda.
-   - Buka dan jalankan installer `app-debug.apk`.
-
-4. **Install via ADB (jika menggunakan komputer & kabel data)**:
-   ```bash
-   adb install -r app-debug.apk
-   ```
