@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,23 +20,30 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -130,6 +138,7 @@ fun MapScreen(
   var selectedBaseMapLayer by remember { mutableStateOf(BaseMapLayer.SATELLITE_ESRI) }
   var showLayerMenu by remember { mutableStateOf(false) }
   var selectedFireRecord by remember { mutableStateOf<FireDataRecord?>(null) }
+  var showLocationDetails by remember { mutableStateOf(false) }
 
   // Marker performance cache (BUG 7)
   var lastUserLocationFingerprint by remember { mutableStateOf<Int?>(null) }
@@ -270,6 +279,15 @@ fun MapScreen(
                 )
               }
             }
+          }
+          IconButton(
+            onClick = { showLocationDetails = !showLocationDetails },
+            modifier = Modifier.testTag("toggle_location_details_button")
+          ) {
+            Icon(
+              imageVector = if (showLocationDetails) Icons.Default.Close else Icons.Default.Info,
+              contentDescription = "Detail Telemetri Lokasi"
+            )
           }
           IconButton(
             onClick = onRefreshLocation,
@@ -516,24 +534,193 @@ fun MapScreen(
           .padding(12.dp)
       )
 
-      // 3. Panel Informasi Lokasi Pengguna di Bawah
-      UserLocationInfoCard(
-        location = deviceLocation,
-        locationStatus = locationStatus,
-        validationResult = validationResult,
-        locationErrorMessage = locationErrorMessage,
-        onRequestPermission = onRequestPermission,
-        fireRecords = fireRecords,
-        fireDataSourceState = fireDataSourceState,
+      // 2a. Floating Legenda Peta
+      Card(
+        modifier = Modifier
+          .align(Alignment.TopStart)
+          .padding(start = 12.dp, top = 64.dp)
+          .testTag("map_legend_card"),
+        colors = CardDefaults.cardColors(
+          containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+        ),
+        shape = RoundedCornerShape(10.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+      ) {
+        Column(
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+          ) {
+            Box(
+              modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFFF5722))
+            )
+            Text(
+              text = "🔥 Titik Panas (${fireRecords.size})",
+              style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+            )
+          }
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+          ) {
+            Box(
+              modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF00C853))
+            )
+            Text(
+              text = "📍 Lokasi Saya",
+              style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+            )
+          }
+        }
+      }
+
+      // 3. Floating Kontrol Peta & Telemetri
+      Column(
         modifier = Modifier
           .align(Alignment.BottomCenter)
-          .padding(16.dp)
-      )
+          .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        if (showLocationDetails) {
+          UserLocationInfoCard(
+            location = deviceLocation,
+            locationStatus = locationStatus,
+            validationResult = validationResult,
+            locationErrorMessage = locationErrorMessage,
+            onRequestPermission = onRequestPermission,
+            fireRecords = fireRecords,
+            fireDataSourceState = fireDataSourceState,
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("user_location_info_card")
+          )
+        }
+
+        Card(
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("map_controls_dock"),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+          shape = RoundedCornerShape(16.dp),
+          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+          elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            // 🔥 Semua Titik Panas
+            FilledTonalButton(
+              onClick = {
+                val validFires = fireRecords.filter { CoordinateValidator.isValid(it.latitude, it.longitude) }
+                if (validFires.isNotEmpty()) {
+                  mapViewRef?.let { mv ->
+                    val minLat = validFires.minOf { it.latitude }
+                    val maxLat = validFires.maxOf { it.latitude }
+                    val minLon = validFires.minOf { it.longitude }
+                    val maxLon = validFires.maxOf { it.longitude }
+                    val centerLat = (minLat + maxLat) / 2.0
+                    val centerLon = (minLon + maxLon) / 2.0
+                    mv.controller.animateTo(GeoPoint(centerLat, centerLon))
+                    try {
+                      mv.zoomToBoundingBox(
+                        org.osmdroid.util.BoundingBox(maxLat + 0.5, maxLon + 0.5, minLat - 0.5, minLon - 0.5),
+                        true,
+                        64
+                      )
+                    } catch (_: Throwable) {}
+                  }
+                } else {
+                  android.widget.Toast.makeText(context, "Belum ada titik panas untuk difokuskan.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+              },
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+              shape = RoundedCornerShape(10.dp),
+              modifier = Modifier.testTag("fit_all_hotspots_button")
+            ) {
+              Icon(Icons.Default.Whatshot, contentDescription = null, tint = Color(0xFFFF5722), modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Semua Titik", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp))
+            }
+
+            // 📍 Lokasi Saya
+            FilledTonalButton(
+              onClick = {
+                if (deviceLocation != null && validationResult.isValid) {
+                  mapViewRef?.let { mv ->
+                    mv.controller.setZoom(16.0)
+                    mv.controller.animateTo(GeoPoint(deviceLocation.latitude, deviceLocation.longitude))
+                  }
+                } else {
+                  android.widget.Toast.makeText(context, "Lokasi GPS belum tersedia.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+              },
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+              shape = RoundedCornerShape(10.dp),
+              modifier = Modifier.testTag("my_location_map_button")
+            ) {
+              Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFF00C853), modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Lokasi Saya", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp))
+            }
+
+            // ☰ Lapisan Peta
+            IconButton(
+              onClick = { showLayerMenu = true },
+              modifier = Modifier.size(36.dp).testTag("layer_selector_button_dock")
+            ) {
+              Icon(Icons.Default.Layers, contentDescription = "Lapisan Peta", modifier = Modifier.size(20.dp))
+            }
+
+            // ➕ Zoom In
+            IconButton(
+              onClick = { mapViewRef?.controller?.zoomIn() },
+              modifier = Modifier.size(36.dp).testTag("zoom_in_button")
+            ) {
+              Icon(Icons.Default.Add, contentDescription = "Zoom In", modifier = Modifier.size(20.dp))
+            }
+
+            // ➖ Zoom Out
+            IconButton(
+              onClick = { mapViewRef?.controller?.zoomOut() },
+              modifier = Modifier.size(36.dp).testTag("zoom_out_button")
+            ) {
+              Icon(Icons.Default.Remove, contentDescription = "Zoom Out", modifier = Modifier.size(20.dp))
+            }
+
+            // 🔄 Muat Ulang
+            IconButton(
+              onClick = {
+                onRefreshLocation()
+                onRefreshSatellite()
+                mapViewRef?.invalidate()
+              },
+              modifier = Modifier.size(36.dp).testTag("refresh_map_button")
+            ) {
+              Icon(Icons.Default.Refresh, contentDescription = "Muat Ulang", modifier = Modifier.size(20.dp))
+            }
+          }
+        }
+      }
 
       // 4. Detail Dialog jika marker titik api diklik
       selectedFireRecord?.let { fire ->
         FireMarkerDetailDialog(
           record = fire,
+          userLocation = deviceLocation,
           onDismiss = { selectedFireRecord = null }
         )
       }
@@ -1231,12 +1418,24 @@ fun UserLocationInfoCard(
 @Composable
 fun FireMarkerDetailDialog(
   record: FireDataRecord,
+  userLocation: DeviceLocation? = null,
   onDismiss: () -> Unit
 ) {
   val context = LocalContext.current
   val acqTimeStr = if (record.acqTime.isNotBlank()) "${record.acqTime} UTC" else "Tidak tersedia"
   val ageStr = FireDataAgeCalculator.formatAgeDetail(record.acquisitionTimestampMillis)
   val coordStr = String.format(Locale.US, "%.6f°, %.6f°", record.latitude, record.longitude)
+
+  val distanceKm = remember(record, userLocation) {
+    if (userLocation != null && CoordinateValidator.isValid(userLocation.latitude, userLocation.longitude)) {
+      com.example.core.share.FireHotspotShareHelper.calculateDistanceKm(
+        userLocation.latitude,
+        userLocation.longitude,
+        record.latitude,
+        record.longitude
+      )
+    } else null
+  }
 
   androidx.compose.material3.AlertDialog(
     onDismissRequest = onDismiss,
@@ -1334,6 +1533,9 @@ fun FireMarkerDetailDialog(
           DetailRow("Resolusi Pixel", "${record.scan} × ${record.track} km")
         }
         DetailRow("Sumber", "NASA FIRMS (NRT)")
+        if (distanceKm != null) {
+          DetailRow("Jarak Dari Posisi Anda", String.format(Locale.US, "%.1f km", distanceKm))
+        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -1357,7 +1559,7 @@ fun FireMarkerDetailDialog(
         // Tombol Bagikan Titik Panas
         Button(
           onClick = {
-            com.example.core.share.FireHotspotShareHelper.shareHotspot(context, record)
+            com.example.core.share.FireHotspotShareHelper.shareHotspot(context, record, distanceKm)
           },
           modifier = Modifier
             .fillMaxWidth()

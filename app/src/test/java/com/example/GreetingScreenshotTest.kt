@@ -32,31 +32,51 @@ class DashboardScreenComposeTest {
       }
     }
 
-    // 1. Header & System Status
+    // 1. Header & App Title
     composeTestRule.onNodeWithTag("app_title").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("system_status_card").assertIsDisplayed()
 
-    // 2. Location card: Permission Required
-    composeTestRule.onNodeWithTag("location_card").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("location_status_text").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("request_permission_button").assertIsDisplayed()
-
-    // 3. Fire Detection card: Data Belum Tersedia & Count '--'
+    // 2. Fire Detection card: Data Belum Tersedia & Count '--'
     composeTestRule.onNodeWithTag("fire_detection_card").assertIsDisplayed()
     composeTestRule.onNodeWithTag("fire_count_value").assertIsDisplayed()
     composeTestRule.onNodeWithText("--").assertIsDisplayed()
     composeTestRule.onNodeWithText("FIRE DATA SOURCE NOT VERIFIED").assertIsDisplayed()
+
+    // 3. Primary action buttons section
+    composeTestRule.onNodeWithTag("primary_action_buttons_section").assertIsDisplayed()
   }
 
   @Test
-  fun dashboardScreen_displaysPermissionDeniedState() {
+  fun realLocationCard_displaysPermissionRequiredState() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        DashboardScreen(
+        com.example.ui.dashboard.RealLocationCard(
+          state = DashboardState(locationStatus = LocationStatus.LOCATION_PERMISSION_REQUIRED),
+          onRequestPermission = {},
+          onRefreshLocation = {},
+          onOpenSettings = {},
+          onOpenLocationSettings = {}
+        )
+      }
+    }
+
+    composeTestRule.onNodeWithTag("location_card").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("location_status_text").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("request_permission_button").assertIsDisplayed()
+  }
+
+  @Test
+  fun realLocationCard_displaysPermissionDeniedState() {
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        com.example.ui.dashboard.RealLocationCard(
           state = DashboardState(
             locationStatus = LocationStatus.LOCATION_PERMISSION_DENIED,
             locationErrorMessage = "LOCATION PERMISSION DENIED: Akses lokasi ditolak"
-          )
+          ),
+          onRequestPermission = {},
+          onRefreshLocation = {},
+          onOpenSettings = {},
+          onOpenLocationSettings = {}
         )
       }
     }
@@ -68,13 +88,17 @@ class DashboardScreenComposeTest {
   }
 
   @Test
-  fun dashboardScreen_displaysProviderDisabledState() {
+  fun realLocationCard_displaysProviderDisabledState() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        DashboardScreen(
+        com.example.ui.dashboard.RealLocationCard(
           state = DashboardState(
             locationStatus = LocationStatus.LOCATION_PROVIDER_DISABLED
-          )
+          ),
+          onRequestPermission = {},
+          onRefreshLocation = {},
+          onOpenSettings = {},
+          onOpenLocationSettings = {}
         )
       }
     }
@@ -85,7 +109,7 @@ class DashboardScreenComposeTest {
   }
 
   @Test
-  fun dashboardScreen_displaysLocationAvailableState() {
+  fun realLocationCard_displaysLocationAvailableState() {
     val fixTime = 1700000000000L
     val testLocation = DeviceLocation(
       latitude = -2.123456,
@@ -97,11 +121,15 @@ class DashboardScreenComposeTest {
 
     composeTestRule.setContent {
       MyApplicationTheme {
-        DashboardScreen(
+        com.example.ui.dashboard.RealLocationCard(
           state = DashboardState(
             locationStatus = LocationStatus.LOCATION_AVAILABLE,
             deviceLocation = testLocation
-          )
+          ),
+          onRequestPermission = {},
+          onRefreshLocation = {},
+          onOpenSettings = {},
+          onOpenLocationSettings = {}
         )
       }
     }
@@ -115,14 +143,18 @@ class DashboardScreenComposeTest {
   }
 
   @Test
-  fun dashboardScreen_displaysLocationErrorState() {
+  fun realLocationCard_displaysLocationErrorState() {
     composeTestRule.setContent {
       MyApplicationTheme {
-        DashboardScreen(
+        com.example.ui.dashboard.RealLocationCard(
           state = DashboardState(
             locationStatus = LocationStatus.LOCATION_ERROR,
             locationErrorMessage = "GPS timeout searching for satellites"
-          )
+          ),
+          onRequestPermission = {},
+          onRefreshLocation = {},
+          onOpenSettings = {},
+          onOpenLocationSettings = {}
         )
       }
     }

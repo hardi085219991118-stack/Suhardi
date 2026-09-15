@@ -376,83 +376,20 @@ fun DashboardScreen(
           ) {
             item {
               Spacer(modifier = Modifier.height(4.dp))
-              // 1. Kartu Utama Titik Panas Terdeteksi (Screen 1)
+              // 1. Kartu Utama Titik Panas Terdeteksi (Sesuai Gambar Referensi)
               FireDetectionCard(state = state)
             }
 
             item {
-              // 2. Tiga Tombol Aksi Utama (Screen 1)
+              // 2. Empat Tombol Aksi Utama Beranda (Sesuai Gambar Referensi)
               PrimaryActionButtonsSection(
+                onOpenHotspotsList = { currentTab = AppBottomNavTab.TITIK_PANAS },
                 onOpenMap = { currentTab = AppBottomNavTab.PETA },
                 onOpenMyLocation = { showMyLocationScreen = true },
                 onRefreshSatellite = onRefreshSatellite,
-                lastUpdateDisplay = state.lastFetchDisplay
+                isRefreshing = state.isLoadingSatellite,
+                cooldownSeconds = state.cooldownRemainingSeconds
               )
-            }
-
-            item {
-              SystemStatusCard(state = state)
-            }
-
-            item {
-              RealLocationCard(
-                state = state,
-                onRequestPermission = {
-                  permissionLauncher.launch(
-                    arrayOf(
-                      Manifest.permission.ACCESS_FINE_LOCATION,
-                      Manifest.permission.ACCESS_COARSE_LOCATION
-                    )
-                  )
-                },
-                onRefreshLocation = onRefreshLocation,
-                onOpenSettings = {
-                  val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.fromParts("package", context.packageName, null)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                  }
-                  context.startActivity(intent)
-                },
-                onOpenLocationSettings = {
-                  val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                  }
-                  context.startActivity(intent)
-                }
-              )
-            }
-
-            item {
-              MapFoundationCard(
-                state = state,
-                onOpenMap = { currentTab = AppBottomNavTab.PETA }
-              )
-            }
-
-            item {
-              SatelliteDataCard(
-                state = state,
-                onConfigureKey = { showKeyDialog = true }
-              )
-            }
-
-            item {
-              LastUpdateCard(state = state)
-            }
-
-            item {
-              NasaFirmsEvidenceCard(state = state)
-            }
-
-            item {
-              RefreshSection(
-                state = state,
-                onRefreshSatellite = onRefreshSatellite
-              )
-            }
-
-            item {
-              AuditSummaryCard(events = auditEvents, errorCount = errorLogs.size)
               Spacer(modifier = Modifier.height(24.dp))
             }
           }
@@ -497,6 +434,17 @@ fun DashboardScreen(
           state = state,
           onViewContract = { showContractScreen = true },
           onConfigureMapKey = { showKeyDialog = true },
+          onRefreshSatellite = onRefreshSatellite,
+          onRefreshLocation = onRefreshLocation,
+          onRequestLocationPermission = {
+            permissionLauncher.launch(
+              arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+              )
+            )
+          },
+          onOpenMap = { currentTab = AppBottomNavTab.PETA },
           modifier = Modifier.padding(innerPadding)
         )
       }
@@ -506,71 +454,123 @@ fun DashboardScreen(
 
 @Composable
 fun PrimaryActionButtonsSection(
+  onOpenHotspotsList: () -> Unit = {},
   onOpenMap: () -> Unit,
   onOpenMyLocation: () -> Unit,
   onRefreshSatellite: () -> Unit,
-  lastUpdateDisplay: String,
+  isRefreshing: Boolean = false,
+  cooldownSeconds: Long = 0L,
+  lastUpdateDisplay: String = "",
   modifier: Modifier = Modifier
 ) {
   Column(
-    modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(10.dp)
+    modifier = modifier
+      .fillMaxWidth()
+      .testTag("primary_action_buttons_section"),
+    verticalArrangement = Arrangement.spacedBy(12.dp)
   ) {
-    // 1. Lihat Peta Titik Panas (Orange)
+    // 1. 🔥 Lihat Titik Panas
+    Button(
+      onClick = onOpenHotspotsList,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(54.dp)
+        .testTag("primary_open_hotspots_button"),
+      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
+      shape = RoundedCornerShape(14.dp)
+    ) {
+      Icon(Icons.Default.Whatshot, contentDescription = null, modifier = Modifier.size(24.dp))
+      Spacer(modifier = Modifier.width(10.dp))
+      Text(
+        text = "🔥 Lihat Titik Panas",
+        fontSize = 16.sp,
+        fontWeight = FontWeight.Bold
+      )
+    }
+
+    // 2. 🗺️ Buka Peta
     Button(
       onClick = onOpenMap,
       modifier = Modifier
         .fillMaxWidth()
-        .height(52.dp)
+        .height(54.dp)
         .testTag("primary_open_map_button"),
-      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
+      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
       shape = RoundedCornerShape(14.dp)
     ) {
-      Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(22.dp))
+      Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(24.dp))
       Spacer(modifier = Modifier.width(10.dp))
       Text(
-        text = "Lihat Peta Titik Panas",
-        fontSize = 15.sp,
+        text = "🗺️ Buka Peta",
+        fontSize = 16.sp,
         fontWeight = FontWeight.Bold
       )
     }
 
-    // 2. Lokasi Saya (Green)
+    // 3. 📍 Lokasi Saya
     Button(
       onClick = onOpenMyLocation,
       modifier = Modifier
         .fillMaxWidth()
-        .height(52.dp)
+        .height(54.dp)
         .testTag("primary_open_my_location_button"),
       colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
       shape = RoundedCornerShape(14.dp)
     ) {
-      Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(22.dp))
+      Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(24.dp))
       Spacer(modifier = Modifier.width(10.dp))
       Text(
-        text = "Lokasi Saya",
-        fontSize = 15.sp,
+        text = "📍 Lokasi Saya",
+        fontSize = 16.sp,
         fontWeight = FontWeight.Bold
       )
     }
 
-    // 3. Perbarui Data Satelit (Blue)
+    // 4. 🔄 Perbarui Data Satelit
     Button(
       onClick = onRefreshSatellite,
+      enabled = !isRefreshing && cooldownSeconds <= 0L,
       modifier = Modifier
         .fillMaxWidth()
-        .height(52.dp)
+        .height(54.dp)
         .testTag("primary_refresh_satellite_button"),
-      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
+      colors = ButtonDefaults.buttonColors(
+        containerColor = Color(0xFF263238),
+        contentColor = Color.White,
+        disabledContainerColor = Color(0xFF37474F).copy(alpha = 0.6f),
+        disabledContentColor = Color.White.copy(alpha = 0.6f)
+      ),
       shape = RoundedCornerShape(14.dp)
     ) {
-      Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(22.dp))
-      Spacer(modifier = Modifier.width(10.dp))
-      Text(
-        text = "Perbarui Data Satelit",
-        fontSize = 15.sp,
-        fontWeight = FontWeight.Bold
-      )
+      if (isRefreshing) {
+        CircularProgressIndicator(
+          modifier = Modifier.size(20.dp),
+          color = Color.White,
+          strokeWidth = 2.dp
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+          text = "Memperbarui Data...",
+          fontSize = 15.sp,
+          fontWeight = FontWeight.Bold
+        )
+      } else if (cooldownSeconds > 0L) {
+        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+          text = "COOLDOWN (${cooldownSeconds}s)",
+          fontSize = 15.sp,
+          fontWeight = FontWeight.Bold
+        )
+      } else {
+        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+          text = "🔄 Perbarui Data Satelit",
+          fontSize = 15.sp,
+          fontWeight = FontWeight.Bold
+        )
+      }
     }
   }
 }
@@ -1239,6 +1239,20 @@ fun FireDetectionCard(state: DashboardState) {
     else -> StatusNotStarted
   }
   val isVerified = state.fireDataState == DataState.AVAILABLE || state.validFireRecordCount != null || state.fireRecords.isNotEmpty()
+  val statusDataText = when (state.fireDataState) {
+    DataState.AVAILABLE -> "Tersedia (${state.fireRecords.size} valid)"
+    DataState.NOT_VERIFIED -> state.fireStatusText
+    DataState.ERROR -> "Gagal memuat data"
+    else -> state.fireStatusText
+  }
+
+  val satText = if (state.satelliteDisplay != "BELUM TERSEDIA") state.satelliteDisplay else "VIIRS / NOAA-21 (NRT)"
+  val ageText = if (state.fireRecords.isNotEmpty()) {
+    val latestTs = state.fireRecords.mapNotNull { it.acquisitionTimestampMillis }.maxOrNull() ?: 0L
+    if (latestTs > 0L) com.example.core.fire.FireDataAgeCalculator.formatAgeDetail(latestTs) else "Data NRT terkini"
+  } else {
+    if (state.dataAgeDisplay != "BELUM TERSEDIA") state.dataAgeDisplay else "Data NRT terkini"
+  }
 
   Card(
     modifier = Modifier
@@ -1247,10 +1261,10 @@ fun FireDetectionCard(state: DashboardState) {
     colors = CardDefaults.cardColors(
       containerColor = MaterialTheme.colorScheme.surface
     ),
-    shape = RoundedCornerShape(16.dp),
-    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5722).copy(alpha = 0.35f))
+    shape = RoundedCornerShape(18.dp),
+    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFF5722).copy(alpha = 0.45f))
   ) {
-    Column(modifier = Modifier.padding(18.dp)) {
+    Column(modifier = Modifier.padding(20.dp)) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1262,7 +1276,7 @@ fun FireDetectionCard(state: DashboardState) {
         ) {
           Box(
             modifier = Modifier
-              .size(36.dp)
+              .size(38.dp)
               .clip(CircleShape)
               .background(Color(0xFFFF5722).copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
@@ -1271,17 +1285,20 @@ fun FireDetectionCard(state: DashboardState) {
               imageVector = Icons.Default.Whatshot,
               contentDescription = "Titik Panas",
               tint = Color(0xFFFF5722),
-              modifier = Modifier.size(22.dp)
+              modifier = Modifier.size(24.dp)
             )
           }
           Text(
             text = "Titik Panas Terdeteksi",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleMedium.copy(
+              fontWeight = FontWeight.Bold,
+              fontSize = 18.sp
+            ),
             color = MaterialTheme.colorScheme.onSurface
           )
         }
         StateBadge(
-          text = if (state.fireDataState == DataState.AVAILABLE) "Data tersedia" else state.fireStatusText,
+          text = if (state.fireDataState == DataState.AVAILABLE) "Data Tersedia" else "Perlu Verifikasi",
           color = badgeColor
         )
       }
@@ -1297,7 +1314,7 @@ fun FireDetectionCard(state: DashboardState) {
           style = MaterialTheme.typography.displayMedium.copy(
             fontWeight = FontWeight.ExtraBold,
             fontFamily = FontFamily.Monospace,
-            fontSize = 44.sp
+            fontSize = 46.sp
           ),
           color = Color(0xFFFF5722),
           modifier = Modifier.testTag("fire_count_value")
@@ -1313,15 +1330,16 @@ fun FireDetectionCard(state: DashboardState) {
       }
 
       Text(
-        text = "Data berdasarkan hasil deteksi satelit NASA FIRMS (NRT)",
+        text = "Data berdasarkan hasil deteksi satelit NASA FIRMS.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
 
-      Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(14.dp))
       HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
       Spacer(modifier = Modifier.height(10.dp))
 
+      // 1. Waktu akuisisi satelit
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1341,18 +1359,19 @@ fun FireDetectionCard(state: DashboardState) {
 
       Spacer(modifier = Modifier.height(6.dp))
 
+      // 2. Satelit aktif
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "Waktu pengambilan data:",
+          text = "Satelit aktif:",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-          text = if (state.lastFetchDisplay != "BELUM PERNAH") state.lastFetchDisplay else "Sesi aktif",
+          text = satText,
           style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
           color = MaterialTheme.colorScheme.onSurface
         )
@@ -1360,30 +1379,43 @@ fun FireDetectionCard(state: DashboardState) {
 
       Spacer(modifier = Modifier.height(6.dp))
 
+      // 3. Status data
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          text = "Sumber data:",
+          text = "Status data:",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-          text = "NASA FIRMS (VIIRS NOAA-21)",
-          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-          color = Color(0xFFFF7043)
+          text = statusDataText,
+          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+          color = MaterialTheme.colorScheme.onSurface
         )
       }
 
       Spacer(modifier = Modifier.height(6.dp))
-      Text(
-        text = state.fireNote,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        fontSize = 11.sp
-      )
+
+      // 4. Usia data
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "Usia data:",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+          text = ageText,
+          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+          color = MaterialTheme.colorScheme.onSurface
+        )
+      }
     }
   }
 }

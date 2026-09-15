@@ -2,6 +2,7 @@ package com.example.ui.dashboard
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -83,6 +85,10 @@ fun InfoSystemScreen(
   state: DashboardState,
   onViewContract: () -> Unit,
   onConfigureMapKey: () -> Unit,
+  onRefreshSatellite: () -> Unit = {},
+  onRefreshLocation: () -> Unit = {},
+  onRequestLocationPermission: () -> Unit = {},
+  onOpenMap: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -149,7 +155,11 @@ fun InfoSystemScreen(
           InfoSubTab.AUDIT_TEKNIS -> AuditTeknisTabContent(
             state = state,
             onViewContract = onViewContract,
-            onConfigureMapKey = onConfigureMapKey
+            onConfigureMapKey = onConfigureMapKey,
+            onRefreshSatellite = onRefreshSatellite,
+            onRefreshLocation = onRefreshLocation,
+            onRequestLocationPermission = onRequestLocationPermission,
+            onOpenMap = onOpenMap
           )
           InfoSubTab.TENTANG -> TentangTabContent(
             onConfigureMapKey = onConfigureMapKey
@@ -323,19 +333,78 @@ private fun StatusItemRow(
 private fun AuditTeknisTabContent(
   state: DashboardState,
   onViewContract: () -> Unit,
-  onConfigureMapKey: () -> Unit
+  onConfigureMapKey: () -> Unit,
+  onRefreshSatellite: () -> Unit,
+  onRefreshLocation: () -> Unit,
+  onRequestLocationPermission: () -> Unit,
+  onOpenMap: () -> Unit
 ) {
+  val context = LocalContext.current
   Column(
     modifier = Modifier
       .fillMaxSize()
       .verticalScroll(rememberScrollState())
       .padding(16.dp),
-    verticalArrangement = Arrangement.spacedBy(12.dp)
+    verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
+    // 1. Status Sistem Utama
+    SystemStatusCard(state = state)
+
+    // 2. Lokasi Riil & Telemetri GPS
+    RealLocationCard(
+      state = state,
+      onRequestPermission = onRequestLocationPermission,
+      onRefreshLocation = onRefreshLocation,
+      onOpenSettings = {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+          data = Uri.fromParts("package", context.packageName, null)
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+      },
+      onOpenLocationSettings = {
+        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+          flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+      }
+    )
+
+    // 3. Fondasi Peta & Engine
+    MapFoundationCard(
+      state = state,
+      onOpenMap = onOpenMap
+    )
+
+    // 4. Data Satelit & Kredensial
+    SatelliteDataCard(
+      state = state,
+      onConfigureKey = onConfigureMapKey
+    )
+
+    // 5. Waktu Pembaruan Terakhir
+    LastUpdateCard(state = state)
+
+    // 6. Bukti Audit NASA FIRMS
+    NasaFirmsEvidenceCard(state = state)
+
+    // 7. Refresh Control Section
+    RefreshSection(
+      state = state,
+      onRefreshSatellite = onRefreshSatellite
+    )
+
+    // 8. Ringkasan Audit & Log Error
+    val auditEvents by com.example.core.logging.AppLogger.auditEvents.collectAsState()
+    val errorLogs by com.example.core.logging.AppLogger.errorLog.collectAsState()
+    AuditSummaryCard(events = auditEvents, errorCount = errorLogs.size)
+
+    // 9. Card Audit Integrasi & Register Fitur
     Card(
       modifier = Modifier.fillMaxWidth(),
       shape = RoundedCornerShape(14.dp),
-      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+      border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
       Column(
         modifier = Modifier.padding(16.dp),
