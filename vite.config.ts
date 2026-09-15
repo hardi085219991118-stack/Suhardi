@@ -122,6 +122,7 @@ function firmsApiPlugin(): Plugin {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), tailwindcss(), firmsApiPlugin()],
   resolve: {
     alias: {
@@ -131,5 +132,6 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',
+    allowedHosts: true,
   },
 });
