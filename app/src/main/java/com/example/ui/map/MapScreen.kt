@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -140,6 +141,9 @@ fun MapScreen(
   // State inisialisasi peta
   var mapStatus by remember { mutableStateOf(MapStatus.MAP_LOADING) }
   var mapErrorMessage by remember { mutableStateOf<String?>(null) }
+  var isFallbackActive by remember { mutableStateOf(false) }
+  var fallbackReason by remember { mutableStateOf<String?>(null) }
+  var retryAttempt by remember { mutableStateOf(0) }
   var tileRetryKey by remember { mutableStateOf(0) }
   var mapViewRef by remember { mutableStateOf<MapView?>(null) }
   var hasInitialCentered by remember { mutableStateOf(false) }
@@ -166,11 +170,12 @@ fun MapScreen(
   // Inisialisasi konfigurasi osmdroid
   DisposableEffect(Unit) {
     try {
-      Configuration.getInstance().load(
-        context.applicationContext,
-        context.getSharedPreferences("osmdroid_prefs", Context.MODE_PRIVATE)
-      )
-      Configuration.getInstance().userAgentValue = context.packageName
+      val osmdroidBasePath = java.io.File(context.cacheDir, "osmdroid")
+      val osmdroidTileCache = java.io.File(osmdroidBasePath, "tiles")
+      if (!osmdroidTileCache.exists()) osmdroidTileCache.mkdirs()
+      Configuration.getInstance().osmdroidBasePath = osmdroidBasePath
+      Configuration.getInstance().osmdroidTileCache = osmdroidTileCache
+      Configuration.getInstance().userAgentValue = "HardiMantangaiFireNow/1.0 (Android; ZeroDummy)"
     } catch (e: Throwable) {
       AppLogger.recordError(
         AppError(
@@ -188,38 +193,44 @@ fun MapScreen(
     }
   }
 
-  // Validasi tile nyata sebelum menetapkan MAP_READY (A1, A2, A4, A5)
+  // Validasi tile nyata dengan Retry Backoff & Fallback otomatis (Section 5, 10, 11, 12)
   LaunchedEffect(selectedBaseMapLayer, tileRetryKey) {
     mapStatus = MapStatus.MAP_LOADING
     onMapStatusChanged(MapStatus.MAP_LOADING, selectedBaseMapLayer)
     mapErrorMessage = null
 
-    val centerLat = deviceLocation?.latitude ?: fireRecords.firstOrNull()?.latitude ?: -2.5
-    val centerLon = deviceLocation?.longitude ?: fireRecords.firstOrNull()?.longitude ?: 114.0
-    val zoom = if (deviceLocation != null) 14 else if (fireRecords.isNotEmpty()) 10 else 5
+    val centerLat = deviceLocation?.latitude ?: fireRecords.firstOrNull()?.latitude ?: -2.15
+    val centerLon = deviceLocation?.longitude ?: fireRecords.firstOrNull()?.longitude ?: 114.65
+    val zoom = if (deviceLocation != null) 14 else if (fireRecords.isNotEmpty()) 10 else 10
 
-    val result = com.example.core.map.MapTileValidator.validateTileForViewport(
-      layer = selectedBaseMapLayer,
+    val outcome = com.example.core.map.MapTileValidator.validateWithRetryAndFallback(
+      desiredLayer = selectedBaseMapLayer,
       latitude = centerLat,
       longitude = centerLon,
-      zoom = zoom
-    )
-    result.fold(
-      onSuccess = {
-        mapStatus = MapStatus.MAP_READY
-        mapErrorMessage = null
-        onMapStatusChanged(MapStatus.MAP_READY, selectedBaseMapLayer)
-      },
-      onFailure = { error ->
-        mapStatus = MapStatus.MAP_ERROR
-        mapErrorMessage = error.message ?: if (selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP) {
-          "Peta jalan tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
-        } else {
-          "Peta satelit tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
-        }
-        onMapStatusChanged(MapStatus.MAP_ERROR, selectedBaseMapLayer)
+      zoom = zoom,
+      onRetryAttempt = { attempt, _ ->
+        retryAttempt = attempt
       }
     )
+
+    if (outcome.isFallback) {
+      isFallbackActive = true
+      fallbackReason = outcome.checkResult.errorMessage ?: outcome.checkResult.failureReason?.userFriendlyMessage
+      mapStatus = MapStatus.MAP_READY
+      mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(BaseMapLayer.OPEN_STREET_MAP))
+      onMapStatusChanged(MapStatus.MAP_READY, BaseMapLayer.OPEN_STREET_MAP)
+    } else if (outcome.checkResult.isValid) {
+      isFallbackActive = false
+      fallbackReason = null
+      mapStatus = MapStatus.MAP_READY
+      mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(selectedBaseMapLayer))
+      onMapStatusChanged(MapStatus.MAP_READY, selectedBaseMapLayer)
+    } else {
+      isFallbackActive = false
+      mapStatus = MapStatus.MAP_ERROR
+      mapErrorMessage = outcome.checkResult.errorMessage ?: outcome.checkResult.failureReason?.userFriendlyMessage
+      onMapStatusChanged(MapStatus.MAP_ERROR, selectedBaseMapLayer)
+    }
   }
 
   // Efek perpindahan kamera saat lokasi pertama kali tersedia (Section 10)
@@ -402,94 +413,8 @@ fun MapScreen(
         .fillMaxSize()
         .padding(innerPadding)
     ) {
-      // 1. Tampilan Native MapView atau Error / Loading Fallback
-      if (mapStatus == MapStatus.MAP_ERROR) {
-        Box(
-          modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp),
-          contentAlignment = Alignment.Center
-        ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-          ) {
-            Icon(
-              imageVector = Icons.Default.Warning,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.error,
-              modifier = Modifier.size(52.dp)
-            )
-            val errorTitle = if (selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP) {
-              "Peta jalan tidak dapat dimuat."
-            } else {
-              "Peta satelit tidak dapat dimuat."
-            }
-            Text(
-              text = errorTitle,
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-              color = MaterialTheme.colorScheme.error,
-              modifier = Modifier.testTag("map_error_title")
-            )
-            Text(
-              text = "Periksa koneksi internet lalu coba lagi.",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.testTag("map_error_subtitle")
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              Button(
-                onClick = { tileRetryKey++ },
-                modifier = Modifier.testTag("retry_tile_button")
-              ) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Coba Lagi")
-              }
-              if (selectedBaseMapLayer == BaseMapLayer.SATELLITE_ESRI) {
-                OutlinedButton(
-                  onClick = {
-                    selectedBaseMapLayer = BaseMapLayer.OPEN_STREET_MAP
-                    mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(BaseMapLayer.OPEN_STREET_MAP))
-                    tileRetryKey++
-                  },
-                  modifier = Modifier.testTag("fallback_osm_button")
-                ) {
-                  Text("Gunakan Peta Jalan (OSM)")
-                }
-              }
-            }
-          }
-        }
-      } else if (mapStatus == MapStatus.MAP_LOADING) {
-        Box(
-          modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-          contentAlignment = Alignment.Center
-        ) {
-          Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-          ) {
-            CircularProgressIndicator(modifier = Modifier.size(44.dp))
-            val loadingMsg = if (selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP) {
-              "Peta jalan sedang dimuat..."
-            } else {
-              "Citra satelit sedang dimuat..."
-            }
-            Text(
-              text = loadingMsg,
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-      } else {
-        // Native OpenStreetMap Component
-        AndroidView(
+      // 1. Tampilan Native MapView (Selalu aktif, tidak ditimpa layar kosong)
+      AndroidView(
           factory = { ctx ->
             try {
               MapView(ctx).apply {
@@ -631,10 +556,11 @@ fun MapScreen(
                 lastFireDataFingerprint = currentFireFingerprint
               }
 
-              // Pasang overlay ke MapView secara efisien
+              // Pasang overlay ke MapView secara berurutan sesuai Section 7:
+              // BASEMAP -> HOTSPOT NASA FIRMS -> GPS USER
               mv.overlays.clear()
-              cachedUserMarker?.let { mv.overlays.add(it) }
               mv.overlays.addAll(cachedFireMarkers)
+              cachedUserMarker?.let { mv.overlays.add(it) }
 
               mv.invalidate()
             }
@@ -643,12 +569,20 @@ fun MapScreen(
             .fillMaxSize()
             .testTag("osm_map_view")
         )
-      }
 
       // 2. Status Bar Atas (Status Peta & Status Lokasi)
       MapStatusBar(
         mapStatus = mapStatus,
-        activeLayer = selectedBaseMapLayer,
+        activeLayer = if (isFallbackActive) BaseMapLayer.OPEN_STREET_MAP else selectedBaseMapLayer,
+        isFallbackActive = isFallbackActive,
+        fallbackReason = fallbackReason,
+        onRetry = {
+          isFallbackActive = false
+          fallbackReason = null
+          selectedBaseMapLayer = BaseMapLayer.SATELLITE_ESRI
+          mapViewRef?.setTileSource(MapTileProviderFactory.ESRI_WORLD_IMAGERY)
+          tileRetryKey++
+        },
         locationStatus = locationStatus,
         isValidCoordinate = validationResult.isValid,
         modifier = Modifier
@@ -863,6 +797,21 @@ fun MapScreen(
             }
           }
         }
+
+        // Legal Attribution (Section 6 & Esri Policy)
+        val attributionText = when {
+          selectedBaseMapLayer == BaseMapLayer.OPEN_STREET_MAP || isFallbackActive -> "© OpenStreetMap contributors"
+          selectedBaseMapLayer == BaseMapLayer.SATELLITE_ESRI -> "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics"
+          else -> "USGS The National Map"
+        }
+        Text(
+          text = attributionText,
+          style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)),
+          modifier = Modifier
+            .align(Alignment.CenterHorizontally)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+        )
       }
 
       // 4. Detail Dialog jika marker titik api diklik
@@ -884,6 +833,9 @@ fun MapScreen(
 private fun MapStatusBar(
   mapStatus: MapStatus,
   activeLayer: BaseMapLayer = BaseMapLayer.SATELLITE_ESRI,
+  isFallbackActive: Boolean = false,
+  fallbackReason: String? = null,
+  onRetry: () -> Unit = {},
   locationStatus: LocationStatus,
   isValidCoordinate: Boolean,
   modifier: Modifier = Modifier
@@ -896,91 +848,141 @@ private fun MapStatusBar(
     shape = RoundedCornerShape(10.dp),
     border = androidx.compose.foundation.BorderStroke(
       1.dp,
-      MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+      if (isFallbackActive) MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+      else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
     )
   ) {
-    Row(
+    Column(
       modifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = 12.dp, vertical = 8.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically
+      verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-      // MAP STATUS
       Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
       ) {
-        Icon(
-          imageVector = Icons.Default.Map,
-          contentDescription = null,
-          tint = when (mapStatus) {
-            MapStatus.MAP_READY -> StatusVerified
-            MapStatus.MAP_ERROR -> StatusBlocked
-            MapStatus.MAP_LOADING -> MaterialTheme.colorScheme.primary
-          },
-          modifier = Modifier.size(16.dp)
-        )
-        val mapStatusLabel = when (mapStatus) {
-          MapStatus.MAP_READY -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Siap" else "Citra Satelit Siap"
-          MapStatus.MAP_ERROR -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Gagal" else "Peta Satelit Gagal"
-          MapStatus.MAP_LOADING -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Memuat Peta Jalan..." else "Memuat Citra Satelit..."
+        // MAP STATUS
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          modifier = Modifier.weight(1f, fill = false)
+        ) {
+          val iconColor = when {
+            isFallbackActive -> MaterialTheme.colorScheme.error
+            mapStatus == MapStatus.MAP_READY -> StatusVerified
+            mapStatus == MapStatus.MAP_ERROR -> StatusBlocked
+            else -> MaterialTheme.colorScheme.primary
+          }
+          Icon(
+            imageVector = when {
+              isFallbackActive -> Icons.Default.Warning
+              mapStatus == MapStatus.MAP_READY -> Icons.Default.Map
+              mapStatus == MapStatus.MAP_ERROR -> Icons.Default.Warning
+              else -> Icons.Default.Map
+            },
+            contentDescription = null,
+            tint = iconColor,
+            modifier = Modifier.size(16.dp)
+          )
+          val mapStatusLabel = when {
+            isFallbackActive -> "⚠️ SATELIT GAGAL — MENGGUNAKAN PETA STANDAR"
+            mapStatus == MapStatus.MAP_READY -> when (activeLayer) {
+              BaseMapLayer.SATELLITE_ESRI -> "🛰️ Citra Satelit | Status: AKTIF"
+              BaseMapLayer.OPEN_STREET_MAP -> "🗺️ Peta Standar | Status: AKTIF"
+              BaseMapLayer.SATELLITE_USGS -> "🛰️ USGS Satelit | Status: AKTIF"
+            }
+            mapStatus == MapStatus.MAP_ERROR -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Standar Gagal" else "Peta Satelit Gagal"
+            mapStatus == MapStatus.MAP_LOADING -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Memuat Peta Standar..." else "Memuat Citra Satelit..."
+            else -> "Status Peta"
+          }
+          Text(
+            text = mapStatusLabel,
+            style = MaterialTheme.typography.labelSmall.copy(
+              fontWeight = FontWeight.Bold,
+              fontSize = 11.sp
+            ),
+            color = iconColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.testTag("map_status_badge")
+          )
         }
-        Text(
-          text = mapStatusLabel,
-          style = MaterialTheme.typography.labelSmall.copy(
-            fontWeight = FontWeight.Bold
-          ),
-          color = when (mapStatus) {
-            MapStatus.MAP_READY -> StatusVerified
-            MapStatus.MAP_ERROR -> StatusBlocked
-            MapStatus.MAP_LOADING -> MaterialTheme.colorScheme.primary
-          },
-          modifier = Modifier.testTag("map_status_badge")
-        )
+
+        // LOCATION STATUS
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          val locIcon = when (locationStatus) {
+            LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) Icons.Default.LocationOn else Icons.Default.Warning
+            LocationStatus.LOCATION_LOADING -> Icons.Default.GpsFixed
+            LocationStatus.LOCATION_PROVIDER_DISABLED -> Icons.Default.GpsOff
+            LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> Icons.Default.LocationOff
+            else -> Icons.Default.LocationOff
+          }
+          val locColor = when (locationStatus) {
+            LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) StatusVerified else StatusBlocked
+            LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
+            LocationStatus.LOCATION_ERROR, LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PROVIDER_DISABLED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> StatusBlocked
+          }
+
+          Icon(
+            imageVector = locIcon,
+            contentDescription = null,
+            tint = locColor,
+            modifier = Modifier.size(16.dp)
+          )
+          val locText = when {
+            locationStatus == LocationStatus.LOCATION_AVAILABLE && !isValidCoordinate -> "KOORDINAT TIDAK VALID"
+            locationStatus == LocationStatus.LOCATION_AVAILABLE -> "GPS AKTIF"
+            locationStatus == LocationStatus.LOCATION_LOADING -> "MENCARI SINYAL GPS..."
+            locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS NONAKTIF"
+            locationStatus == LocationStatus.LOCATION_PERMISSION_DENIED || locationStatus == LocationStatus.LOCATION_PERMISSION_REQUIRED -> "IZIN LOKASI BELUM DIBERIKAN"
+            else -> "STATUS LOKASI"
+          }
+          Text(
+            text = locText,
+            style = MaterialTheme.typography.labelSmall.copy(
+              fontWeight = FontWeight.Bold,
+              fontFamily = FontFamily.Monospace,
+              fontSize = 11.sp
+            ),
+            color = locColor,
+            modifier = Modifier.testTag("map_location_status_badge")
+          )
+        }
       }
 
-      // LOCATION STATUS
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-      ) {
-        val locIcon = when (locationStatus) {
-          LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) Icons.Default.LocationOn else Icons.Default.Warning
-          LocationStatus.LOCATION_LOADING -> Icons.Default.GpsFixed
-          LocationStatus.LOCATION_PROVIDER_DISABLED -> Icons.Default.GpsOff
-          LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> Icons.Default.LocationOff
-          else -> Icons.Default.LocationOff
+      // Baris Fallback Diagnostik & Tombol Coba Lagi
+      if (isFallbackActive) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Text(
+            text = fallbackReason ?: "Citra satelit tidak dapat dihubungi. Mengalihkan ke OpenStreetMap.",
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            color = MaterialTheme.colorScheme.error,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Button(
+            onClick = onRetry,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+            modifier = Modifier
+              .height(28.dp)
+              .testTag("retry_tile_button")
+          ) {
+            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("Coba Lagi", style = MaterialTheme.typography.labelSmall)
+          }
         }
-        val locColor = when (locationStatus) {
-          LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) StatusVerified else StatusBlocked
-          LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
-          LocationStatus.LOCATION_ERROR, LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PROVIDER_DISABLED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> StatusBlocked
-        }
-
-        Icon(
-          imageVector = locIcon,
-          contentDescription = null,
-          tint = locColor,
-          modifier = Modifier.size(16.dp)
-        )
-        val locText = when {
-          locationStatus == LocationStatus.LOCATION_AVAILABLE && !isValidCoordinate -> "KOORDINAT TIDAK VALID"
-          locationStatus == LocationStatus.LOCATION_AVAILABLE -> "GPS AKTIF"
-          locationStatus == LocationStatus.LOCATION_LOADING -> "MENCARI SINYAL GPS..."
-          locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS NONAKTIF"
-          locationStatus == LocationStatus.LOCATION_PERMISSION_DENIED || locationStatus == LocationStatus.LOCATION_PERMISSION_REQUIRED -> "IZIN LOKASI BELUM DIBERIKAN"
-          else -> "STATUS LOKASI"
-        }
-        Text(
-          text = locText,
-          style = MaterialTheme.typography.labelSmall.copy(
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-          ),
-          color = locColor,
-          modifier = Modifier.testTag("map_location_status_badge")
-        )
       }
     }
   }

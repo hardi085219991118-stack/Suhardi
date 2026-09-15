@@ -71,6 +71,7 @@ secrets {
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
   ignoreList.add("FIRMS_MAP_KEY")
+  ignoreList.add("ARCGIS_API_KEY")
 }
 
 

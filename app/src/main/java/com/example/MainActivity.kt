@@ -30,6 +30,19 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    // Inisialisasi Osmdroid internal cache & User Agent resmi (Section 6, 13, 14)
+    try {
+      val osmdroidBasePath = java.io.File(applicationContext.cacheDir, "osmdroid")
+      val osmdroidTileCache = java.io.File(osmdroidBasePath, "tiles")
+      if (!osmdroidTileCache.exists()) osmdroidTileCache.mkdirs()
+      org.osmdroid.config.Configuration.getInstance().osmdroidBasePath = osmdroidBasePath
+      org.osmdroid.config.Configuration.getInstance().osmdroidTileCache = osmdroidTileCache
+      org.osmdroid.config.Configuration.getInstance().userAgentValue = "HardiMantangaiFireNow/1.0 (Android; ZeroDummy)"
+    } catch (_: Throwable) {
+      // Fallback grace
+    }
+
     setContent {
       MyApplicationTheme {
         val state by viewModel.uiState.collectAsState()
