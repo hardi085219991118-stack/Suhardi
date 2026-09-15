@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -96,8 +97,14 @@ fun DashboardScreen(
   onSetMapKey: (String?) -> Unit = {}
 ) {
   val context = LocalContext.current
+  var currentTab by remember { mutableStateOf(AppBottomNavTab.BERANDA) }
   var showContractScreen by remember { mutableStateOf(false) }
   var showMapScreen by remember { mutableStateOf(false) }
+  var showMyLocationScreen by remember { mutableStateOf(false) }
+  var showFilterDialog by remember { mutableStateOf(false) }
+  var filterCriteria by remember { mutableStateOf(HotspotFilterCriteria()) }
+  var selectedHotspotForDetail by remember { mutableStateOf<com.example.core.fire.FireDataRecord?>(null) }
+
   var showKeyDialog by remember { mutableStateOf(false) }
   var keyInput by remember { mutableStateOf("") }
   val auditEvents by AppLogger.auditEvents.collectAsState()
@@ -125,11 +132,21 @@ fun DashboardScreen(
               .testTag("map_key_input_field"),
             singleLine = true
           )
+          TextButton(
+            onClick = {
+              val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://firms.modaps.eosdis.nasa.gov/api/map_key/")).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+              }
+              context.startActivity(intent)
+            }
+          ) {
+            Text("Dapatkan MAP_KEY gratis di firms.modaps.eosdis.nasa.gov ↗", fontSize = 12.sp)
+          }
           Text(
             "STATUS ARSITEKTUR: CLIENT_ONLY_LIMITATION\n" +
             "JENIS KREDENSIAL: CLIENT_SIDE_CREDENTIAL\n" +
             "BATASAN KEAMANAN: PRODUCTION_SECURITY_LIMITATION\n\n" +
-            "Peringatan: Kredensial disimpan pada SharedPreferences lokal. Jangan gunakan API Key produksi bernilai tinggi tanpa backend proxy/KMS.",
+            "Peringatan: Kredensial disimpan pada SharedPreferences lokal.",
             style = MaterialTheme.typography.labelSmall.copy(
               fontFamily = FontFamily.Monospace,
               fontSize = 10.sp
@@ -180,6 +197,24 @@ fun DashboardScreen(
     }
   }
 
+  // Detail Titik Panas Dialog (Screen 3)
+  if (selectedHotspotForDetail != null) {
+    com.example.ui.map.FireMarkerDetailDialog(
+      record = selectedHotspotForDetail!!,
+      onDismiss = { selectedHotspotForDetail = null }
+    )
+  }
+
+  // Filter Hotspots Dialog (Screen 4)
+  if (showFilterDialog) {
+    FilterHotspotsDialog(
+      currentCriteria = filterCriteria,
+      onApplyCriteria = { filterCriteria = it },
+      onDismiss = { showFilterDialog = false }
+    )
+  }
+
+  // Layar Peta khusus dari open_map_button legacy
   if (showMapScreen) {
     MapScreen(
       deviceLocation = state.deviceLocation,
@@ -202,6 +237,29 @@ fun DashboardScreen(
     return
   }
 
+  // Layar Lokasi Saya (Screen 6)
+  if (showMyLocationScreen) {
+    MyLocationScreen(
+      state = state,
+      onBack = { showMyLocationScreen = false },
+      onRefreshLocation = onRefreshLocation,
+      onRequestPermission = {
+        permissionLauncher.launch(
+          arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+          )
+        )
+      },
+      onOpenMap = {
+        showMyLocationScreen = false
+        currentTab = AppBottomNavTab.PETA
+      }
+    )
+    return
+  }
+
+  // Layar Kontrak & Registri Audit
   if (showContractScreen) {
     Column(modifier = Modifier.fillMaxSize()) {
       Box(
@@ -224,72 +282,193 @@ fun DashboardScreen(
 
   Scaffold(
     modifier = modifier.fillMaxSize(),
-    topBar = {
-      TopAppBar(
-        title = {
-          Column {
-            Text(
-              text = "HARDI MANTANGAI FIRE NOW",
-              style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp
-              ),
-              modifier = Modifier.testTag("app_title")
-            )
-            Text(
-              text = "SYSTEM STATUS — ZERO DUMMY MODE",
-              style = MaterialTheme.typography.labelSmall.copy(
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-              ),
-              modifier = Modifier.testTag("system_status_subtitle")
-            )
-          }
-        },
-        actions = {
-          TextButton(
-            onClick = { showMapScreen = true },
-            modifier = Modifier.testTag("open_map_button")
-          ) {
-            Text(
-              text = "Peta",
-              style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-              color = MaterialTheme.colorScheme.primary
-            )
-          }
-          TextButton(
-            onClick = { showContractScreen = true },
-            modifier = Modifier.testTag("view_contract_button")
-          ) {
-            Text(
-              text = "Kontrak & Registri",
-              style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-              color = MaterialTheme.colorScheme.primary
-            )
-          }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-          containerColor = MaterialTheme.colorScheme.surface,
-          titleContentColor = MaterialTheme.colorScheme.onSurface
-        )
+    bottomBar = {
+      MyNavigationBottomBar(
+        currentTab = currentTab,
+        onTabSelected = { tab ->
+          currentTab = tab
+          showMapScreen = false
+          showMyLocationScreen = false
+        }
       )
     }
   ) { innerPadding ->
-    LazyColumn(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(innerPadding)
-        .padding(horizontal = 16.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-      item {
-        Spacer(modifier = Modifier.height(4.dp))
-        SystemStatusCard(state = state)
+    when (currentTab) {
+      AppBottomNavTab.BERANDA -> {
+        Column(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+        ) {
+          TopAppBar(
+            title = {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFFF5722).copy(alpha = 0.15f)),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.Whatshot,
+                    contentDescription = null,
+                    tint = Color(0xFFFF5722),
+                    modifier = Modifier.size(20.dp)
+                  )
+                }
+                Column {
+                  Text(
+                    text = "HARDI MANTANGAI FIRE NOW",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                      fontWeight = FontWeight.Bold,
+                      letterSpacing = 0.5.sp
+                    ),
+                    modifier = Modifier.testTag("app_title")
+                  )
+                  Text(
+                    text = "Pemantauan Titik Panas Satelit",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                      color = MaterialTheme.colorScheme.primary,
+                      fontWeight = FontWeight.SemiBold
+                    ),
+                    modifier = Modifier.testTag("system_status_subtitle")
+                  )
+                }
+              }
+            },
+            actions = {
+              TextButton(
+                onClick = { currentTab = AppBottomNavTab.PETA },
+                modifier = Modifier.testTag("open_map_button")
+              ) {
+                Text(
+                  text = "Peta",
+                  style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                  color = MaterialTheme.colorScheme.primary
+                )
+              }
+              TextButton(
+                onClick = { showContractScreen = true },
+                modifier = Modifier.testTag("view_contract_button")
+              ) {
+                Text(
+                  text = "Kontrak",
+                  style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                  color = MaterialTheme.colorScheme.primary
+                )
+              }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+              containerColor = MaterialTheme.colorScheme.surface,
+              titleContentColor = MaterialTheme.colorScheme.onSurface
+            )
+          )
+
+          LazyColumn(
+            modifier = Modifier
+              .fillMaxSize()
+              .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+          ) {
+            item {
+              Spacer(modifier = Modifier.height(4.dp))
+              // 1. Kartu Utama Titik Panas Terdeteksi (Screen 1)
+              FireDetectionCard(state = state)
+            }
+
+            item {
+              // 2. Tiga Tombol Aksi Utama (Screen 1)
+              PrimaryActionButtonsSection(
+                onOpenMap = { currentTab = AppBottomNavTab.PETA },
+                onOpenMyLocation = { showMyLocationScreen = true },
+                onRefreshSatellite = onRefreshSatellite,
+                lastUpdateDisplay = state.lastFetchDisplay
+              )
+            }
+
+            item {
+              SystemStatusCard(state = state)
+            }
+
+            item {
+              RealLocationCard(
+                state = state,
+                onRequestPermission = {
+                  permissionLauncher.launch(
+                    arrayOf(
+                      Manifest.permission.ACCESS_FINE_LOCATION,
+                      Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                  )
+                },
+                onRefreshLocation = onRefreshLocation,
+                onOpenSettings = {
+                  val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                  }
+                  context.startActivity(intent)
+                },
+                onOpenLocationSettings = {
+                  val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                  }
+                  context.startActivity(intent)
+                }
+              )
+            }
+
+            item {
+              MapFoundationCard(
+                state = state,
+                onOpenMap = { currentTab = AppBottomNavTab.PETA }
+              )
+            }
+
+            item {
+              SatelliteDataCard(
+                state = state,
+                onConfigureKey = { showKeyDialog = true }
+              )
+            }
+
+            item {
+              LastUpdateCard(state = state)
+            }
+
+            item {
+              NasaFirmsEvidenceCard(state = state)
+            }
+
+            item {
+              RefreshSection(
+                state = state,
+                onRefreshSatellite = onRefreshSatellite
+              )
+            }
+
+            item {
+              AuditSummaryCard(events = auditEvents, errorCount = errorLogs.size)
+              Spacer(modifier = Modifier.height(24.dp))
+            }
+          }
+        }
       }
 
-      item {
-        RealLocationCard(
-          state = state,
+      AppBottomNavTab.PETA -> {
+        MapScreen(
+          deviceLocation = state.deviceLocation,
+          locationStatus = state.locationStatus,
+          locationErrorMessage = state.locationErrorMessage,
+          fireRecords = state.fireRecords,
+          fireDataSourceState = state.fireDataSourceState,
+          onBackToDashboard = { currentTab = AppBottomNavTab.BERANDA },
+          onRefreshLocation = onRefreshLocation,
+          onRefreshSatellite = onRefreshSatellite,
           onRequestPermission = {
             permissionLauncher.launch(
               arrayOf(
@@ -298,60 +477,100 @@ fun DashboardScreen(
               )
             )
           },
-          onRefreshLocation = onRefreshLocation,
-          onOpenSettings = {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-              data = Uri.fromParts("package", context.packageName, null)
-              flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-          },
-          onOpenLocationSettings = {
-            val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).apply {
-              flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-          }
+          modifier = Modifier.padding(innerPadding)
         )
       }
 
-      item {
-        MapFoundationCard(
+      AppBottomNavTab.TITIK_PANAS -> {
+        HotspotsListScreen(
           state = state,
-          onOpenMap = { showMapScreen = true }
+          onSelectRecord = { selectedHotspotForDetail = it },
+          onOpenFilter = { showFilterDialog = true },
+          filterCriteria = filterCriteria,
+          onResetFilter = { filterCriteria = HotspotFilterCriteria() },
+          modifier = Modifier.padding(innerPadding)
         )
       }
 
-      item {
-        FireDetectionCard(state = state)
-      }
-
-      item {
-        SatelliteDataCard(
+      AppBottomNavTab.INFO -> {
+        InfoSystemScreen(
           state = state,
-          onConfigureKey = { showKeyDialog = true }
+          onViewContract = { showContractScreen = true },
+          onConfigureMapKey = { showKeyDialog = true },
+          modifier = Modifier.padding(innerPadding)
         )
       }
+    }
+  }
+}
 
-      item {
-        LastUpdateCard(state = state)
-      }
+@Composable
+fun PrimaryActionButtonsSection(
+  onOpenMap: () -> Unit,
+  onOpenMyLocation: () -> Unit,
+  onRefreshSatellite: () -> Unit,
+  lastUpdateDisplay: String,
+  modifier: Modifier = Modifier
+) {
+  Column(
+    modifier = modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(10.dp)
+  ) {
+    // 1. Lihat Peta Titik Panas (Orange)
+    Button(
+      onClick = onOpenMap,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(52.dp)
+        .testTag("primary_open_map_button"),
+      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
+      shape = RoundedCornerShape(14.dp)
+    ) {
+      Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(22.dp))
+      Spacer(modifier = Modifier.width(10.dp))
+      Text(
+        text = "Lihat Peta Titik Panas",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold
+      )
+    }
 
-      item {
-        NasaFirmsEvidenceCard(state = state)
-      }
+    // 2. Lokasi Saya (Green)
+    Button(
+      onClick = onOpenMyLocation,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(52.dp)
+        .testTag("primary_open_my_location_button"),
+      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
+      shape = RoundedCornerShape(14.dp)
+    ) {
+      Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(22.dp))
+      Spacer(modifier = Modifier.width(10.dp))
+      Text(
+        text = "Lokasi Saya",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold
+      )
+    }
 
-      item {
-        RefreshSection(
-          state = state,
-          onRefreshSatellite = onRefreshSatellite
-        )
-      }
-
-      item {
-        AuditSummaryCard(events = auditEvents, errorCount = errorLogs.size)
-        Spacer(modifier = Modifier.height(24.dp))
-      }
+    // 3. Perbarui Data Satelit (Blue)
+    Button(
+      onClick = onRefreshSatellite,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(52.dp)
+        .testTag("primary_refresh_satellite_button"),
+      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
+      shape = RoundedCornerShape(14.dp)
+    ) {
+      Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(22.dp))
+      Spacer(modifier = Modifier.width(10.dp))
+      Text(
+        text = "Perbarui Data Satelit",
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Bold
+      )
     }
   }
 }
@@ -1019,16 +1238,19 @@ fun FireDetectionCard(state: DashboardState) {
     DataState.ERROR -> StatusBlocked
     else -> StatusNotStarted
   }
+  val isVerified = state.fireDataState == DataState.AVAILABLE || state.validFireRecordCount != null || state.fireRecords.isNotEmpty()
+
   Card(
     modifier = Modifier
       .fillMaxWidth()
       .testTag("fire_detection_card"),
     colors = CardDefaults.cardColors(
-      containerColor = MaterialTheme.colorScheme.surfaceVariant
+      containerColor = MaterialTheme.colorScheme.surface
     ),
-    shape = RoundedCornerShape(12.dp)
+    shape = RoundedCornerShape(16.dp),
+    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5722).copy(alpha = 0.35f))
   ) {
-    Column(modifier = Modifier.padding(16.dp)) {
+    Column(modifier = Modifier.padding(18.dp)) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1036,55 +1258,131 @@ fun FireDetectionCard(state: DashboardState) {
       ) {
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
+          horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-          Icon(
-            imageVector = Icons.Default.Whatshot,
-            contentDescription = "Titik Api",
-            tint = if (state.fireDataState == DataState.AVAILABLE) StatusVerified else MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(24.dp)
-          )
+          Box(
+            modifier = Modifier
+              .size(36.dp)
+              .clip(CircleShape)
+              .background(Color(0xFFFF5722).copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+          ) {
+            Icon(
+              imageVector = Icons.Default.Whatshot,
+              contentDescription = "Titik Panas",
+              tint = Color(0xFFFF5722),
+              modifier = Modifier.size(22.dp)
+            )
+          }
           Text(
-            text = "TITIK API",
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            text = "Titik Panas Terdeteksi",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface
           )
         }
-        StateBadge(text = state.fireStatusText, color = badgeColor)
+        StateBadge(
+          text = if (state.fireDataState == DataState.AVAILABLE) "Data tersedia" else state.fireStatusText,
+          color = badgeColor
+        )
       }
 
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(14.dp))
 
       Row(
         verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
       ) {
         Text(
           text = state.fireCountDisplay,
           style = MaterialTheme.typography.displayMedium.copy(
             fontWeight = FontWeight.ExtraBold,
-            fontFamily = FontFamily.Monospace
+            fontFamily = FontFamily.Monospace,
+            fontSize = 44.sp
           ),
-          color = MaterialTheme.colorScheme.primary,
+          color = Color(0xFFFF5722),
           modifier = Modifier.testTag("fire_count_value")
         )
         Text(
-          text = if (state.validFireRecordCount != null) "DETEKSI RESMI DARI SATELIT" else "DATA BELUM TERSEDIA",
-          style = MaterialTheme.typography.bodyMedium.copy(
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace
+          text = if (isVerified) "titik panas valid" else "titik panas",
+          style = MaterialTheme.typography.titleSmall.copy(
+            fontWeight = FontWeight.Bold
           ),
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.padding(bottom = 8.dp)
         )
       }
 
+      Text(
+        text = "Data berdasarkan hasil deteksi satelit NASA FIRMS (NRT)",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+      HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+      Spacer(modifier = Modifier.height(10.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "Waktu akuisisi satelit:",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+          text = if (state.lastUpdateDisplay != "BELUM TERSEDIA") state.lastUpdateDisplay else "Data resmi NASA FIRMS",
+          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+          color = MaterialTheme.colorScheme.onSurface
+        )
+      }
+
       Spacer(modifier = Modifier.height(6.dp))
 
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "Waktu pengambilan data:",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+          text = if (state.lastFetchDisplay != "BELUM PERNAH") state.lastFetchDisplay else "Sesi aktif",
+          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+          color = MaterialTheme.colorScheme.onSurface
+        )
+      }
+
+      Spacer(modifier = Modifier.height(6.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(
+          text = "Sumber data:",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+          text = "NASA FIRMS (VIIRS NOAA-21)",
+          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+          color = Color(0xFFFF7043)
+        )
+      }
+
+      Spacer(modifier = Modifier.height(6.dp))
       Text(
         text = state.fireNote,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.sp
       )
     }
   }

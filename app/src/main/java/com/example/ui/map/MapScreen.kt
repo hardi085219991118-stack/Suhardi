@@ -19,13 +19,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsOff
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -202,14 +206,13 @@ fun MapScreen(
         title = {
           Column {
             Text(
-              text = "PETA GEOGRAFIS (FIRE-005)",
+              text = "Peta Titik Panas",
               style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
               modifier = Modifier.testTag("map_screen_title")
             )
             Text(
-              text = "PROVIDER: ${MapProviderInfo.PROVIDER_NAME}",
+              text = "Citra Satelit – NASA FIRMS",
               style = MaterialTheme.typography.labelSmall.copy(
-                fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.primary
               ),
               modifier = Modifier.testTag("map_provider_info_text")
@@ -1223,58 +1226,160 @@ fun UserLocationInfoCard(
 
 /**
  * Dialog rincian hotspot terverifikasi NASA FIRMS saat marker titik api disentuh.
- * Adhering strictly to Bagian 8: detail lengkap tanpa asumsi dan tanpa data dummy.
+ * Dilengkapi aksi: Buka di Google Maps, Bagikan Titik Panas, dan Salin Koordinat.
  */
 @Composable
 fun FireMarkerDetailDialog(
   record: FireDataRecord,
   onDismiss: () -> Unit
 ) {
-  val acqTimeStr = if (record.acqTime.isNotBlank()) "${record.acqTime} UTC" else "N/A"
+  val context = LocalContext.current
+  val acqTimeStr = if (record.acqTime.isNotBlank()) "${record.acqTime} UTC" else "Tidak tersedia"
   val ageStr = FireDataAgeCalculator.formatAgeDetail(record.acquisitionTimestampMillis)
+  val coordStr = String.format(Locale.US, "%.6f°, %.6f°", record.latitude, record.longitude)
 
   androidx.compose.material3.AlertDialog(
     onDismissRequest = onDismiss,
     icon = {
-      Icon(
-        imageVector = Icons.Default.LocalFireDepartment,
-        contentDescription = null,
-        tint = Color(0xFFD32F2F),
-        modifier = Modifier.size(32.dp)
-      )
+      Box(
+        modifier = Modifier
+          .size(48.dp)
+          .clip(CircleShape)
+          .background(Color(0xFFD32F2F).copy(alpha = 0.15f)),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          imageVector = Icons.Default.LocalFireDepartment,
+          contentDescription = null,
+          tint = Color(0xFFD32F2F),
+          modifier = Modifier.size(28.dp)
+        )
+      }
     },
     title = {
-      Text(
-        text = "DETAIL TITIK API TERDETEKSI",
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-        modifier = Modifier.testTag("fire_marker_detail_title")
-      )
+      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+          text = "DETAIL TITIK PANAS",
+          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+          modifier = Modifier.testTag("fire_marker_detail_title")
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(
+          modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(StatusVerified.copy(alpha = 0.2f))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+          Text(
+            text = "DATA RESMI NASA FIRMS",
+            style = MaterialTheme.typography.labelSmall.copy(
+              fontWeight = FontWeight.Bold,
+              color = StatusVerified
+            )
+          )
+        }
+      }
     },
     text = {
       Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth()
       ) {
-        DetailRow("Koordinat", String.format(Locale.US, "%.5f°, %.5f°", record.latitude, record.longitude))
-        DetailRow("Tanggal Akuisisi", record.acqDate.ifBlank { "N/A" })
+        // Koordinat dengan tombol salin
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column {
+            Text(
+              text = "Koordinat",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+              text = coordStr,
+              style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+              fontFamily = FontFamily.Monospace
+            )
+          }
+          IconButton(
+            onClick = {
+              val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+              val clip = android.content.ClipData.newPlainText("Koordinat Hotspot", coordStr)
+              clipboard?.setPrimaryClip(clip)
+              android.widget.Toast.makeText(context, "Koordinat disalin: $coordStr", android.widget.Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.size(36.dp)
+          ) {
+            Icon(
+              imageVector = Icons.Default.ContentCopy,
+              contentDescription = "Salin Koordinat",
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(20.dp)
+            )
+          }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+        DetailRow("Satelit", record.satellite.ifBlank { "Tidak tersedia" })
+        DetailRow("Instrumen", record.instrument.ifBlank { "Tidak tersedia" })
+        DetailRow("Tanggal Akuisisi", record.acqDate.ifBlank { "Tidak tersedia" })
         DetailRow("Waktu Akuisisi", acqTimeStr)
         DetailRow("Usia Data Satelit", ageStr)
-        DetailRow("Satelit", record.satellite.ifBlank { "N/A" })
-        DetailRow("Instrumen", record.instrument.ifBlank { "N/A" })
-        DetailRow("Tingkat Keyakinan", record.confidence ?: "N/A")
-        DetailRow("FRP (Power)", if (record.frp != null) "${record.frp} MW" else "N/A")
+        DetailRow("Tingkat Keyakinan", record.confidence ?: "Tidak tersedia")
+        DetailRow("Daya Radiasi (FRP)", if (record.frp != null) "${record.frp} MW" else "Tidak tersedia")
         if (record.scan != null && record.track != null) {
           DetailRow("Resolusi Pixel", "${record.scan} × ${record.track} km")
         }
-        DetailRow("Sumber Data", "NASA FIRMS Web Services (Resmi)")
+        DetailRow("Sumber", "NASA FIRMS (NRT)")
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Tombol Buka di Google Maps
+        Button(
+          onClick = {
+            com.example.core.share.FireHotspotShareHelper.openGoogleMaps(context, record.latitude, record.longitude)
+          },
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .testTag("open_in_google_maps_button"),
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1976D2)),
+          shape = RoundedCornerShape(12.dp)
+        ) {
+          Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(20.dp))
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("🗺️ Buka di Google Maps", fontWeight = FontWeight.Bold)
+        }
+
+        // Tombol Bagikan Titik Panas
+        Button(
+          onClick = {
+            com.example.core.share.FireHotspotShareHelper.shareHotspot(context, record)
+          },
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .testTag("share_fire_hotspot_button"),
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE64A19)),
+          shape = RoundedCornerShape(12.dp)
+        ) {
+          Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(20.dp))
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("📤 Bagikan Titik Panas", fontWeight = FontWeight.Bold)
+        }
       }
     },
     confirmButton = {
-      Button(
+      TextButton(
         onClick = onDismiss,
-        modifier = Modifier.testTag("dismiss_fire_detail_button")
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("dismiss_fire_detail_button")
       ) {
-        Text("Tutup")
+        Text("Tutup", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
   )

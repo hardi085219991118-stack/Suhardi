@@ -2,51 +2,52 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand palette: Emergency Telemetry & Fire Monitoring
-val FirePrimaryDark = Color(0xFFFF5722)
-val FireOnPrimaryDark = Color(0xFF3E1100)
-val FirePrimaryContainerDark = Color(0xFF601A00)
+// Brand palette: Hardi Mantangai Fire Now (Navy Dark Aesthetic from reference design)
+val FirePrimaryDark = Color(0xFFFF5722) // Red/Orange for hotspots
+val FireOnPrimaryDark = Color(0xFFFFFFFF)
+val FirePrimaryContainerDark = Color(0xFF4A1806)
 val FireOnPrimaryContainerDark = Color(0xFFFFDBCE)
 
-val FireSecondaryDark = Color(0xFF81D4FA)
-val FireOnSecondaryDark = Color(0xFF003548)
-val FireSecondaryContainerDark = Color(0xFF004D67)
-val FireOnSecondaryContainerDark = Color(0xFFBEE9FF)
+val FireSecondaryDark = Color(0xFF00C853) // Vibrant Green for positive/GPS/verification
+val FireOnSecondaryDark = Color(0xFFFFFFFF)
+val FireSecondaryContainerDark = Color(0xFF003816)
+val FireOnSecondaryContainerDark = Color(0xFFB9F6CA)
 
-val FireTertiaryDark = Color(0xFFFFB74D)
-val FireOnTertiaryDark = Color(0xFF452B00)
+val FireTertiaryDark = Color(0xFF1E88E5) // Blue for map actions
+val FireOnTertiaryDark = Color(0xFFFFFFFF)
 
-val FireBackgroundDark = Color(0xFF0F141A)
-val FireSurfaceDark = Color(0xFF161C24)
-val FireSurfaceVariantDark = Color(0xFF222A36)
-val FireOnSurfaceDark = Color(0xFFE2E8F0)
-val FireOnSurfaceVariantDark = Color(0xFF94A3B8)
-val FireOutlineDark = Color(0xFF475569)
+val FireBackgroundDark = Color(0xFF0B131E) // Deep Dark Navy background
+val FireSurfaceDark = Color(0xFF131F33) // Navy Card surface
+val FireSurfaceVariantDark = Color(0xFF1A2840) // Slightly lighter Navy
+val FireOnSurfaceDark = Color(0xFFFFFFFF)
+val FireOnSurfaceVariantDark = Color(0xFF90A4AE) // Slate Grey
+val FireOutlineDark = Color(0xFF1E2D45) // Subtle Card Border
 
-// Light Palette
-val FirePrimaryLight = Color(0xFFD84315)
+// Light Palette (anchored to dark navy theme for visual consistency)
+val FirePrimaryLight = Color(0xFFFF5722)
 val FireOnPrimaryLight = Color(0xFFFFFFFF)
 val FirePrimaryContainerLight = Color(0xFFFFDBCE)
 val FireOnPrimaryContainerLight = Color(0xFF380C00)
 
-val FireSecondaryLight = Color(0xFF0277BD)
+val FireSecondaryLight = Color(0xFF00C853)
 val FireOnSecondaryLight = Color(0xFFFFFFFF)
-val FireSecondaryContainerLight = Color(0xFFCAE6FF)
-val FireOnSecondaryContainerLight = Color(0xFF001E2E)
+val FireSecondaryContainerLight = Color(0xFFB9F6CA)
+val FireOnSecondaryContainerLight = Color(0xFF003314)
 
-val FireTertiaryLight = Color(0xFFEF6C00)
+val FireTertiaryLight = Color(0xFF1E88E5)
 val FireOnTertiaryLight = Color(0xFFFFFFFF)
 
-val FireBackgroundLight = Color(0xFFF8FAFC)
-val FireSurfaceLight = Color(0xFFFFFFFF)
-val FireSurfaceVariantLight = Color(0xFFEDF2F7)
-val FireOnSurfaceLight = Color(0xFF0F172A)
-val FireOnSurfaceVariantLight = Color(0xFF475569)
-val FireOutlineLight = Color(0xFFCBD5E1)
+val FireBackgroundLight = Color(0xFF0B131E)
+val FireSurfaceLight = Color(0xFF131F33)
+val FireSurfaceVariantLight = Color(0xFF1A2840)
+val FireOnSurfaceLight = Color(0xFFFFFFFF)
+val FireOnSurfaceVariantLight = Color(0xFF90A4AE)
+val FireOutlineLight = Color(0xFF1E2D45)
 
-// Status colors for contract
-val StatusNotStarted = Color(0xFF64748B)
-val StatusImplementing = Color(0xFF0284C7)
-val StatusImplemented = Color(0xFFD97706)
-val StatusVerified = Color(0xFF16A34A)
-val StatusBlocked = Color(0xFFDC2626)
+// Status colors for contract and telemetry
+val StatusNotStarted = Color(0xFF78909C)
+val StatusImplementing = Color(0xFF1E88E5)
+val StatusImplemented = Color(0xFFFFB300)
+val StatusVerified = Color(0xFF00C853)
+val StatusBlocked = Color(0xFFE53935)
+
