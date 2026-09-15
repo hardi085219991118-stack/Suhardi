@@ -2,6 +2,7 @@ package com.example.ui.map
 
 import android.content.Context
 import android.view.View
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +52,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -82,6 +84,7 @@ import com.example.core.logging.AppError
 import com.example.core.logging.AppLogger
 import com.example.core.logging.ErrorType
 import com.example.core.map.CoordinateValidator
+import com.example.core.map.HotspotNavigationHelper
 import com.example.core.map.MapProviderInfo
 import com.example.ui.theme.StatusBlocked
 import com.example.ui.theme.StatusNotStarted
@@ -299,6 +302,51 @@ fun MapScreen(
         },
         actions = {
           IconButton(
+            onClick = {
+              val validFires = fireRecords.filter { CoordinateValidator.isValid(it.latitude, it.longitude) }
+              if (validFires.isEmpty()) {
+                val msg = if (isFiltered) "Tidak ada titik panas yang sesuai dengan penyaring." else "Belum ada titik panas untuk difokuskan."
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+              } else if (validFires.size == 1) {
+                val single = validFires.first()
+                mapViewRef?.let { mv ->
+                  mv.controller.setZoom(15.0)
+                  mv.controller.animateTo(GeoPoint(single.latitude, single.longitude))
+                }
+              } else {
+                mapViewRef?.let { mv ->
+                  val minLat = validFires.minOf { it.latitude }
+                  val maxLat = validFires.maxOf { it.latitude }
+                  val minLon = validFires.minOf { it.longitude }
+                  val maxLon = validFires.maxOf { it.longitude }
+                  val centerLat = (minLat + maxLat) / 2.0
+                  val centerLon = (minLon + maxLon) / 2.0
+                  val latSpan = maxLat - minLat
+                  val lonSpan = maxLon - minLon
+                  val latPadding = maxOf(latSpan * 0.08, 0.01)
+                  val lonPadding = maxOf(lonSpan * 0.08, 0.01)
+                  try {
+                    mv.zoomToBoundingBox(
+                      org.osmdroid.util.BoundingBox(maxLat + latPadding, maxLon + lonPadding, minLat - latPadding, minLon - lonPadding),
+                      true,
+                      64
+                    )
+                  } catch (_: Throwable) {
+                    mv.controller.setZoom(12.0)
+                    mv.controller.animateTo(GeoPoint(centerLat, centerLon))
+                  }
+                }
+              }
+            },
+            modifier = Modifier.testTag("fit_all_hotspots_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Whatshot,
+              contentDescription = "Fokus Semua Titik Panas",
+              tint = Color(0xFFFF5722)
+            )
+          }
+          IconButton(
             onClick = onOpenFilter,
             modifier = Modifier.testTag("map_filter_button")
           ) {
@@ -372,40 +420,6 @@ fun MapScreen(
           titleContentColor = MaterialTheme.colorScheme.onSurface
         )
       )
-    },
-    floatingActionButton = {
-      // FAB Pusatkan ke Lokasi Pengguna
-      if (locationStatus == LocationStatus.LOCATION_AVAILABLE && deviceLocation != null && validationResult.isValid) {
-        FloatingActionButton(
-          onClick = {
-            mapViewRef?.let { mv ->
-              try {
-                val pt = GeoPoint(deviceLocation.latitude, deviceLocation.longitude)
-                mv.controller.animateTo(pt)
-                mv.controller.setZoom(16.5)
-              } catch (e: Throwable) {
-                AppLogger.recordError(
-                  AppError(
-                    type = ErrorType.UNKNOWN_ERROR,
-                    message = "Gagal memusatkan kamera: ${e.message}",
-                    source = "MapScreen.FAB",
-                    recoveryAction = "Verifikasi MapView controller",
-                    cause = e
-                  )
-                )
-              }
-            }
-          },
-          modifier = Modifier.testTag("recenter_button"),
-          containerColor = MaterialTheme.colorScheme.primaryContainer,
-          contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        ) {
-          Icon(
-            imageVector = Icons.Default.MyLocation,
-            contentDescription = "Pusatkan ke Posisi Saya"
-          )
-        }
-      }
     }
   ) { innerPadding ->
     Box(
@@ -653,13 +667,110 @@ fun MapScreen(
         }
       }
 
-      // 3. Floating Kontrol Peta & Telemetri
+      // 3. Kontrol Sisi Kanan (Kanan Atas: Zoom In/Out, Kanan Tengah/Bawah: GPS / Posisi Saya)
+      Column(
+        modifier = Modifier
+          .align(Alignment.TopEnd)
+          .padding(top = 64.dp, end = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+      ) {
+        // Kontrol Zoom (+ / -) di sisi kanan atas
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+          tonalElevation = 4.dp,
+          shadowElevation = 4.dp,
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        ) {
+          Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+          ) {
+            IconButton(
+              onClick = { mapViewRef?.controller?.zoomIn() },
+              modifier = Modifier
+                .size(44.dp)
+                .testTag("zoom_in_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Perbesar Peta (+)",
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurface
+              )
+            }
+
+            HorizontalDivider(
+              modifier = Modifier.width(28.dp),
+              thickness = 1.dp,
+              color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+            )
+
+            IconButton(
+              onClick = { mapViewRef?.controller?.zoomOut() },
+              modifier = Modifier
+                .size(44.dp)
+                .testTag("zoom_out_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Remove,
+                contentDescription = "Perkecil Peta (−)",
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurface
+              )
+            }
+          }
+        }
+
+        // Tombol GPS / Lokasi (berjarak aman di bawah tombol zoom)
+        Surface(
+          shape = CircleShape,
+          color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+          tonalElevation = 4.dp,
+          shadowElevation = 4.dp,
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+        ) {
+          IconButton(
+            onClick = {
+              if (deviceLocation != null && validationResult.isValid) {
+                mapViewRef?.let { mv ->
+                  val pt = GeoPoint(deviceLocation.latitude, deviceLocation.longitude)
+                  mv.controller.animateTo(pt)
+                  mv.controller.setZoom(16.5)
+                }
+              } else {
+                onRequestPermission()
+                onRefreshLocation()
+                val msg = if (locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED) {
+                  "Sensor GPS nonaktif. Silakan aktifkan GPS perangkat."
+                } else {
+                  "Mencari sinyal GPS..."
+                }
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+              }
+            },
+            modifier = Modifier
+              .size(44.dp)
+              .testTag("recenter_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.MyLocation,
+              contentDescription = "Pusatkan ke Posisi Saya (GPS)",
+              tint = if (deviceLocation != null && validationResult.isValid) Color(0xFF00C853) else MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(22.dp)
+            )
+          }
+        }
+      }
+
+      // 4. Bagian Bawah Area Peta: [ Lokasi Saya ]   [ Layer ]   [ Buka Peta ]
       Column(
         modifier = Modifier
           .align(Alignment.BottomCenter)
-          .padding(horizontal = 12.dp, vertical = 12.dp),
+          .fillMaxWidth()
+          .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
       ) {
         if (showLocationDetails) {
           UserLocationInfoCard(
@@ -680,66 +791,19 @@ fun MapScreen(
           modifier = Modifier
             .fillMaxWidth()
             .testTag("map_controls_dock"),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)),
           shape = RoundedCornerShape(16.dp),
-          border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
           elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
           Row(
             modifier = Modifier
               .fillMaxWidth()
               .padding(horizontal = 8.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
-            // 🔥 Semua Titik Panas (B8, B9)
-            FilledTonalButton(
-              onClick = {
-                val validFires = fireRecords.filter { CoordinateValidator.isValid(it.latitude, it.longitude) }
-                if (validFires.isEmpty()) {
-                  val msg = if (isFiltered) "Tidak ada titik panas yang sesuai dengan penyaring." else "Belum ada titik panas untuk difokuskan."
-                  android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                } else if (validFires.size == 1) {
-                  val single = validFires.first()
-                  mapViewRef?.let { mv ->
-                    mv.controller.setZoom(15.0)
-                    mv.controller.animateTo(GeoPoint(single.latitude, single.longitude))
-                  }
-                } else {
-                  mapViewRef?.let { mv ->
-                    val minLat = validFires.minOf { it.latitude }
-                    val maxLat = validFires.maxOf { it.latitude }
-                    val minLon = validFires.minOf { it.longitude }
-                    val maxLon = validFires.maxOf { it.longitude }
-                    val centerLat = (minLat + maxLat) / 2.0
-                    val centerLon = (minLon + maxLon) / 2.0
-                    val latSpan = maxLat - minLat
-                    val lonSpan = maxLon - minLon
-                    val latPadding = maxOf(latSpan * 0.08, 0.01)
-                    val lonPadding = maxOf(lonSpan * 0.08, 0.01)
-                    try {
-                      mv.zoomToBoundingBox(
-                        org.osmdroid.util.BoundingBox(maxLat + latPadding, maxLon + lonPadding, minLat - latPadding, minLon - lonPadding),
-                        true,
-                        64
-                      )
-                    } catch (_: Throwable) {
-                      mv.controller.setZoom(12.0)
-                      mv.controller.animateTo(GeoPoint(centerLat, centerLon))
-                    }
-                  }
-                }
-              },
-              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-              shape = RoundedCornerShape(10.dp),
-              modifier = Modifier.testTag("fit_all_hotspots_button")
-            ) {
-              Icon(Icons.Default.Whatshot, contentDescription = null, tint = Color(0xFFFF5722), modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(4.dp))
-              Text("Semua Titik", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp))
-            }
-
-            // 📍 Lokasi Saya
+            // 1. [ Lokasi Saya ]
             FilledTonalButton(
               onClick = {
                 if (deviceLocation != null && validationResult.isValid) {
@@ -748,52 +812,142 @@ fun MapScreen(
                     mv.controller.animateTo(GeoPoint(deviceLocation.latitude, deviceLocation.longitude))
                   }
                 } else {
-                  android.widget.Toast.makeText(context, "Lokasi GPS belum tersedia.", android.widget.Toast.LENGTH_SHORT).show()
+                  onRequestPermission()
+                  onRefreshLocation()
+                  val msg = if (locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED) {
+                    "Sensor GPS nonaktif. Silakan aktifkan GPS perangkat."
+                  } else {
+                    "Lokasi GPS belum tersedia. Memperbarui sinyal..."
+                  }
+                  android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                 }
               },
-              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-              shape = RoundedCornerShape(10.dp),
-              modifier = Modifier.testTag("my_location_map_button")
+              modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .testTag("my_location_map_button"),
+              contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+              shape = RoundedCornerShape(10.dp)
             ) {
-              Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color(0xFF00C853), modifier = Modifier.size(16.dp))
+              Icon(
+                imageVector = Icons.Default.MyLocation,
+                contentDescription = "Lokasi Saya",
+                tint = Color(0xFF00C853),
+                modifier = Modifier.size(16.dp)
+              )
               Spacer(modifier = Modifier.width(4.dp))
-              Text("Lokasi Saya", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp))
+              Text(
+                text = "Lokasi Saya",
+                style = MaterialTheme.typography.labelMedium.copy(
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 11.sp
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
             }
 
-            // ☰ Lapisan Peta
-            IconButton(
-              onClick = { showLayerMenu = true },
-              modifier = Modifier.size(36.dp).testTag("layer_selector_button_dock")
-            ) {
-              Icon(Icons.Default.Layers, contentDescription = "Lapisan Peta", modifier = Modifier.size(20.dp))
+            // 2. [ Layer ]
+            Box(modifier = Modifier.weight(1f)) {
+              FilledTonalButton(
+                onClick = { showLayerMenu = true },
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .height(44.dp)
+                  .testTag("layer_selector_button_dock"),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(10.dp)
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Layers,
+                  contentDescription = "Layer",
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = "Layer",
+                  style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                  ),
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+              }
+
+              DropdownMenu(
+                expanded = showLayerMenu,
+                onDismissRequest = { showLayerMenu = false }
+              ) {
+                BaseMapLayer.values().forEach { layer ->
+                  DropdownMenuItem(
+                    text = {
+                      Column {
+                        Text(
+                          text = layer.displayName,
+                          style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = if (selectedBaseMapLayer == layer) FontWeight.Bold else FontWeight.Normal
+                          )
+                        )
+                        Text(
+                          text = layer.providerDescription,
+                          style = MaterialTheme.typography.labelSmall,
+                          color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                      }
+                    },
+                    onClick = {
+                      selectedBaseMapLayer = layer
+                      mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(layer))
+                      showLayerMenu = false
+                    }
+                  )
+                }
+              }
             }
 
-            // ➕ Zoom In
-            IconButton(
-              onClick = { mapViewRef?.controller?.zoomIn() },
-              modifier = Modifier.size(36.dp).testTag("zoom_in_button")
-            ) {
-              Icon(Icons.Default.Add, contentDescription = "Zoom In", modifier = Modifier.size(20.dp))
-            }
-
-            // ➖ Zoom Out
-            IconButton(
-              onClick = { mapViewRef?.controller?.zoomOut() },
-              modifier = Modifier.size(36.dp).testTag("zoom_out_button")
-            ) {
-              Icon(Icons.Default.Remove, contentDescription = "Zoom Out", modifier = Modifier.size(20.dp))
-            }
-
-            // 🔄 Muat Ulang
-            IconButton(
+            // 3. [ Buka Peta ]
+            FilledTonalButton(
               onClick = {
-                onRefreshLocation()
-                onRefreshSatellite()
-                mapViewRef?.invalidate()
+                val center = mapViewRef?.mapCenter
+                val lat = center?.latitude ?: deviceLocation?.latitude ?: fireRecords.firstOrNull()?.latitude ?: -2.15
+                val lon = center?.longitude ?: deviceLocation?.longitude ?: fireRecords.firstOrNull()?.longitude ?: 114.65
+                val mapIntent = HotspotNavigationHelper.createGoogleMapsNavigationIntent(lat, lon, "Hardi Mantangai")
+                  ?: HotspotNavigationHelper.createGeoIntent(lat, lon, "Hardi Mantangai")
+                try {
+                  context.startActivity(mapIntent)
+                } catch (_: Exception) {
+                  android.widget.Toast.makeText(context, "Aplikasi peta tidak ditemukan.", android.widget.Toast.LENGTH_SHORT).show()
+                }
               },
-              modifier = Modifier.size(36.dp).testTag("refresh_map_button")
+              modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .testTag("open_map_action_button"),
+              contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+              shape = RoundedCornerShape(10.dp),
+              colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = Color(0xFF1976D2).copy(alpha = 0.15f),
+                contentColor = Color(0xFF1976D2)
+              )
             ) {
-              Icon(Icons.Default.Refresh, contentDescription = "Muat Ulang", modifier = Modifier.size(20.dp))
+              Icon(
+                imageVector = Icons.Default.Map,
+                contentDescription = "Buka Peta",
+                tint = Color(0xFF1976D2),
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = "Buka Peta",
+                style = MaterialTheme.typography.labelMedium.copy(
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 11.sp
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
             }
           }
         }

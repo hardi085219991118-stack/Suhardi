@@ -71,6 +71,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.fire.FireDataSourceState
 import com.example.core.location.DeviceLocation
 import com.example.core.location.LocationStatus
 import com.example.core.location.LocationVerificationLevel
@@ -1246,18 +1247,18 @@ fun LocationDataDisplay(
 
 @Composable
 fun FireDetectionCard(state: DashboardState) {
-  val badgeColor = when (state.fireDataState) {
-    DataState.AVAILABLE -> StatusVerified
-    DataState.NOT_VERIFIED -> StatusNotStarted
-    DataState.ERROR -> StatusBlocked
-    else -> StatusNotStarted
-  }
-  val isVerified = state.fireDataState == DataState.AVAILABLE && (state.validFireRecordCount != null || state.fireRecords.isNotEmpty())
-  val statusDataText = when (state.fireDataState) {
-    DataState.AVAILABLE -> "Tersedia (${state.fireRecords.size} valid)"
-    DataState.NOT_VERIFIED -> state.fireStatusText
-    DataState.ERROR -> "Gagal memuat data"
-    else -> state.fireStatusText
+  val isVerified = (state.fireDataSourceState == FireDataSourceState.DATA_SOURCE_AVAILABLE ||
+    state.fireDataSourceState == FireDataSourceState.NO_DETECTIONS_IN_QUERY ||
+    (state.fireDataSourceState == FireDataSourceState.CACHED && state.fireRecords.isNotEmpty())) &&
+    state.liveVerificationGate == com.example.core.fire.LiveVerificationGate.LIVE_API_VERIFIED
+
+  val badgeColor = if (isVerified) StatusVerified else StatusNotStarted
+  val badgeText = if (isVerified) "TERVERIFIKASI" else "TIDAK TERVERIFIKASI"
+
+  val statusDataText = if (isVerified) {
+    "TERVERIFIKASI (${state.validFireRecordCount ?: state.fireRecords.size} valid)"
+  } else {
+    state.fireStatusText
   }
 
   val satText = if (state.fireDataState == DataState.AVAILABLE && state.satelliteDisplay.isNotBlank() && state.satelliteDisplay != "BELUM TERSEDIA" && state.satelliteDisplay != "Belum tersedia" && state.satelliteDisplay != "READY FOR LIVE REQUEST") {
@@ -1318,7 +1319,7 @@ fun FireDetectionCard(state: DashboardState) {
           )
         }
         StateBadge(
-          text = if (state.fireDataState == DataState.AVAILABLE) "Data Tersedia" else "Perlu Verifikasi",
+          text = badgeText,
           color = badgeColor
         )
       }

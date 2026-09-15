@@ -184,9 +184,9 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = if (credState == FireDataCredentialState.CONFIGURED) "READY FOR LIVE REQUEST" else "FIRE DATA SOURCE NOT VERIFIED",
+        fireStatusText = "FIRE DATA SOURCE NOT VERIFIED",
         fireNote = if (credState == FireDataCredentialState.CONFIGURED) {
-          "MAP_KEY terkonfigurasi (TEST_CREDENTIAL_ONLY). Tekan 'Perbarui Data Satelit' untuk melakukan live request ke NASA FIRMS."
+          "MAP_KEY terkonfigurasi pada storage lokal. Tekan 'Perbarui Data Satelit' untuk memverifikasi data langsung dengan NASA FIRMS."
         } else {
           "Sumber data titik api belum dihubungkan. Menampilkan '--' karena belum ada data (Bukan 0 titik api)."
         },
@@ -212,7 +212,7 @@ class DashboardViewModel(
         rawRecordCount = response.rawRecordCount,
         responseSha256Hash = response.responseSha256Hash,
         fireCountDisplay = response.validRecordCount.toString(),
-        fireStatusText = "DATA SOURCE AVAILABLE",
+        fireStatusText = "FIRE DATA SOURCE VERIFIED",
         fireNote = "Ditemukan ${response.validRecordCount} deteksi titik api valid dari satelit $activeSatName.",
         fireRecords = response.records,
         satelliteState = DataState.AVAILABLE,
@@ -236,7 +236,7 @@ class DashboardViewModel(
         rawRecordCount = response.rawRecordCount,
         responseSha256Hash = response.responseSha256Hash,
         fireCountDisplay = "0",
-        fireStatusText = "NO DETECTIONS IN QUERY",
+        fireStatusText = "FIRE DATA SOURCE VERIFIED (0 TITIK API)",
         fireNote = "Tidak ada titik api terdeteksi dalam area query pada overpass satelit terakhir ($activeSatName).",
         fireRecords = emptyList(),
         satelliteState = DataState.AVAILABLE,
@@ -258,7 +258,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = if (credState == FireDataCredentialState.INVALID) "INVALID CREDENTIAL" else "API CREDENTIAL REQUIRED",
+        fireStatusText = if (credState == FireDataCredentialState.INVALID) "FIRE DATA SOURCE NOT VERIFIED (INVALID CREDENTIAL)" else "FIRE DATA SOURCE NOT VERIFIED (KREDENSIAL DIBUTUHKAN)",
         fireNote = if (credState == FireDataCredentialState.INVALID) {
           "MAP_KEY NASA FIRMS ditolak atau tidak valid. Daftarkan MAP_KEY resmi di https://firms.modaps.eosdis.nasa.gov."
         } else {
@@ -279,7 +279,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = "NETWORK ERROR",
+        fireStatusText = "FIRE DATA SOURCE NOT VERIFIED (NETWORK ERROR)",
         fireNote = "Gagal menghubungi server NASA FIRMS. Periksa koneksi internet perangkat.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
@@ -296,7 +296,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = "TIMEOUT",
+        fireStatusText = "FIRE DATA SOURCE NOT VERIFIED (TIMEOUT)",
         fireNote = "Waktu koneksi ke server NASA FIRMS habis (Timeout).",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
@@ -313,7 +313,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = "RATE LIMIT EXCEEDED (HTTP 429)",
+        fireStatusText = "FIRE DATA SOURCE NOT VERIFIED (RATE LIMIT 429)",
         fireNote = "Permintaan melebihi kuota NASA FIRMS. Cooldown dan backoff sedang aktif.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
@@ -330,7 +330,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = "DATA SOURCE UNAVAILABLE",
+        fireStatusText = "FIRE DATA SOURCE NOT VERIFIED (UNAVAILABLE)",
         fireNote = response.error?.message ?: "Server NASA FIRMS tidak dapat dihubungi.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
@@ -347,7 +347,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = null,
         fireCountDisplay = "--",
-        fireStatusText = "INVALID NASA FIRMS RESPONSE",
+        fireStatusText = "FIRE DATA SOURCE NOT VERIFIED (INVALID RESPONSE)",
         fireNote = response.error?.message ?: "Payload CSV dari NASA FIRMS tidak valid.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
@@ -372,7 +372,7 @@ class DashboardViewModel(
         credentialState = credState,
         validFireRecordCount = response.validRecordCount,
         fireCountDisplay = response.validRecordCount.toString(),
-        fireStatusText = "CACHED DATA",
+        fireStatusText = "FIRE DATA SOURCE VERIFIED (CACHE)",
         fireNote = "Data cache tersimpan (${response.cacheAgeMillis / 1000}s lalu). BUKAN DATA LIVE.",
         fireRecords = response.records,
         satelliteState = DataState.AVAILABLE,
