@@ -142,3 +142,41 @@ object FeatureRegistry {
     return features.firstOrNull { it.id == id }
   }
 }
+
+/**
+ * FEATURE LOCK REGISTRY
+ * Memastikan fitur yang telah lolos pengujian (LOCKED BASELINE) terkunci secara absolut.
+ * Fitur baru (Pengukuran Tanah) dibangun secara terisolasi tanpa merusak fitur locked.
+ */
+data class LockedFeature(
+  val name: String,
+  val locked: Boolean = true,
+  val description: String
+)
+
+object FeatureLockRegistry {
+  val lockedFeatures: List<LockedFeature> = listOf(
+    LockedFeature("NASA FIRMS", true, "Sumber data satelit resmi & parsing otentik"),
+    LockedFeature("Hotspot", true, "Mesin analisis, filter, dan deteksi titik panas"),
+    LockedFeature("Detail Hotspot", true, "Dialog informasi telemetri titik panas"),
+    LockedFeature("Navigasi Hotspot", true, "Navigasi multi-tier turn-by-turn ke koordinat api"),
+    LockedFeature("GPS Existing", true, "Pelacakan lokasi perangkat Android dan akurasi"),
+    LockedFeature("Esri World Imagery", true, "Layer citra satelit global resolusi tinggi"),
+    LockedFeature("OpenStreetMap", true, "Layer peta standar referensi open data"),
+    LockedFeature("USGS", true, "Layer citra USGS dengan verifikasi ketersediaan wilayah"),
+    LockedFeature("Filter", true, "Penyaringan multi-kriteria radius, satelit, dan usia"),
+    LockedFeature("Marker", true, "Marker titik panas dan marker lokasi pengguna"),
+    LockedFeature("Zoom", true, "Kontrol perbesaran/pengecilan batas zoom aman"),
+    LockedFeature("Layer", true, "Kontrol pemilihan layer peta satu panel terpadu"),
+    LockedFeature("Bottom Navigation", true, "Bilah navigasi aplikasi terpadu"),
+    LockedFeature("Dashboard", true, "Beranda ringkasan status sistem dan aksi cepat"),
+    LockedFeature("APK Build", true, "Pipeline build APK Android mandiri")
+  )
+
+  const val FEATURE_LAND_MEASUREMENT: Boolean = true
+
+  fun isFeatureLocked(featureName: String): Boolean {
+    return lockedFeatures.any { it.name.equals(featureName, ignoreCase = true) && it.locked }
+  }
+}
+

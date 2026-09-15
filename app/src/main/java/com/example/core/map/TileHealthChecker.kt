@@ -25,6 +25,7 @@ enum class TileFailureReason(val userFriendlyMessage: String) {
   UNAUTHORIZED_401("Konfigurasi akses citra satelit tidak valid (401 Unauthorized)."),
   FORBIDDEN_403("Akses layanan citra satelit ditolak (403 Forbidden)."),
   NOT_FOUND_404("Tile citra satelit tidak ditemukan pada koordinat ini (404 Not Found)."),
+  USGS_NO_COVERAGE("USGS tidak memiliki citra tersedia di lokasi ini."),
   RATE_LIMITED_429("Batas permintaan layanan citra satelit terlampaui (429 Rate Limited)."),
   SERVER_ERROR_5XX("Server citra satelit sedang mengalami gangguan (Server 5xx)."),
   HTTP_ERROR_OTHER("Layanan citra satelit merespons status tidak terduga."),
@@ -190,6 +191,8 @@ object TileHealthChecker {
             return@withContext res
           }
           httpCode == 404 -> {
+            val isUsgs = layer == BaseMapLayer.SATELLITE_USGS
+            val failure = if (isUsgs) TileFailureReason.USGS_NO_COVERAGE else TileFailureReason.NOT_FOUND_404
             val res = TileCheckResult(
               isValid = false,
               provider = providerName,
@@ -200,8 +203,8 @@ object TileHealthChecker {
               httpCode = httpCode,
               contentType = contentType,
               payloadSizeBytes = bodySize,
-              failureReason = TileFailureReason.NOT_FOUND_404,
-              errorMessage = TileFailureReason.NOT_FOUND_404.userFriendlyMessage
+              failureReason = failure,
+              errorMessage = if (isUsgs) "USGS tidak memiliki citra tersedia di lokasi ini." else TileFailureReason.NOT_FOUND_404.userFriendlyMessage
             )
             logAndRecordResult(res)
             return@withContext res

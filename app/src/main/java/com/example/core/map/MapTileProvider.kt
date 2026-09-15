@@ -192,8 +192,23 @@ object MapTileValidator {
     }
 
     if (desiredLayer != BaseMapLayer.SATELLITE_ESRI) {
-      // Non-satellite layer diuji sekali
       val res = TileHealthChecker.checkTileHealth(desiredLayer, latitude, longitude, zoom)
+      if (!res.isValid) {
+        // Fallback sesuai hierarki: USGS -> Esri World Imagery -> OSM
+        val fallbackLayer = if (desiredLayer == BaseMapLayer.SATELLITE_USGS) {
+          BaseMapLayer.SATELLITE_ESRI
+        } else {
+          BaseMapLayer.SATELLITE_ESRI
+        }
+        return LayerValidationOutcome(
+          effectiveLayer = fallbackLayer,
+          isFallback = true,
+          checkResult = res.copy(
+            isFallback = true,
+            fallbackProvider = fallbackLayer.displayName
+          )
+        )
+      }
       return LayerValidationOutcome(
         effectiveLayer = desiredLayer,
         isFallback = false,

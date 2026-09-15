@@ -124,7 +124,13 @@ import java.util.Locale
  * Konfigurasi layer, batas zoom, dan latar belakang tile untuk mencegah tampilan citra satelit putih saat zoom.
  */
 private fun configureMapViewLayer(mapView: MapView, layer: BaseMapLayer) {
-  val expectedSource = MapTileProviderFactory.getTileSource(layer)
+  val expectedSource = if (layer == BaseMapLayer.SATELLITE_USGS) {
+    // USGS The National Map tidak memiliki coverage citra untuk Indonesia/Kalimantan (404 Not Found).
+    // Agar tidak menampilkan layar putih/kosong (Bug 1), gunakan Esri World Imagery sebagai visual fallback.
+    MapTileProviderFactory.ESRI_WORLD_IMAGERY
+  } else {
+    MapTileProviderFactory.getTileSource(layer)
+  }
   if (mapView.tileProvider.tileSource.name() != expectedSource.name()) {
     mapView.setTileSource(expectedSource)
   }
@@ -301,18 +307,31 @@ fun MapScreen(
     topBar = {
       TopAppBar(
         title = {
-          Column {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(end = 4.dp),
+            verticalArrangement = Arrangement.Center
+          ) {
             Text(
               text = "Peta Titik Panas",
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+              style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp
+              ),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
               modifier = Modifier.testTag("map_screen_title")
             )
             Text(
               text = indicatorText,
               style = MaterialTheme.typography.labelSmall.copy(
                 color = if (isFiltered) Color(0xFFFF5722) else MaterialTheme.colorScheme.primary,
-                fontWeight = if (isFiltered) FontWeight.Bold else FontWeight.Normal
+                fontWeight = if (isFiltered) FontWeight.Bold else FontWeight.Normal,
+                fontSize = 11.sp
               ),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
               modifier = Modifier.testTag("map_provider_info_text")
             )
           }
@@ -391,7 +410,8 @@ fun MapScreen(
             ) {
               Icon(
                 imageVector = Icons.Default.Layers,
-                contentDescription = "Pilih Layer Peta"
+                contentDescription = "Pilih Layer Peta",
+                tint = MaterialTheme.colorScheme.primary
               )
             }
             DropdownMenu(
@@ -399,17 +419,35 @@ fun MapScreen(
               onDismissRequest = { showLayerMenu = false }
             ) {
               BaseMapLayer.values().forEach { layer ->
+                val isSelected = selectedBaseMapLayer == layer
                 DropdownMenuItem(
                   text = {
                     Column {
-                      Text(
-                        text = layer.displayName,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                          fontWeight = if (selectedBaseMapLayer == layer) FontWeight.Bold else FontWeight.Normal
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                          text = layer.displayName,
+                          style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                          )
                         )
-                      )
+                        if (isSelected) {
+                          Spacer(modifier = Modifier.width(6.dp))
+                          Text(
+                            text = "[Aktif]",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                              fontWeight = FontWeight.Bold,
+                              color = MaterialTheme.colorScheme.primary
+                            )
+                          )
+                        }
+                      }
                       Text(
-                        text = layer.providerDescription,
+                        text = if (layer == BaseMapLayer.SATELLITE_USGS) {
+                          "${layer.providerDescription} (Wilayah AS; otomatis fallback ke Esri di Kalimantan)"
+                        } else {
+                          layer.providerDescription
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                       )
@@ -431,15 +469,6 @@ fun MapScreen(
             Icon(
               imageVector = if (showLocationDetails) Icons.Default.Close else Icons.Default.Info,
               contentDescription = "Detail Telemetri Lokasi"
-            )
-          }
-          IconButton(
-            onClick = onRefreshLocation,
-            modifier = Modifier.testTag("refresh_location_from_map_button")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Refresh,
-              contentDescription = "Refresh Lokasi"
             )
           }
         },
@@ -631,11 +660,61 @@ fun MapScreen(
           .padding(12.dp)
       )
 
+      // 2b. Banner Non-Coverage USGS (Jujur dan menyediakan tindakan fallback)
+      if (selectedBaseMapLayer == BaseMapLayer.SATELLITE_USGS) {
+        Card(
+          modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 68.dp, start = 12.dp, end = 12.dp)
+            .fillMaxWidth()
+            .testTag("usgs_coverage_banner"),
+          colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+          shape = RoundedCornerShape(10.dp),
+          border = BorderStroke(1.dp, Color(0xFFFFB74D).copy(alpha = 0.5f))
+        ) {
+          Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(
+              imageVector = Icons.Default.Info,
+              contentDescription = null,
+              tint = Color(0xFFFFB74D),
+              modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = "USGS tidak tersedia di lokasi ini.",
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, color = Color.White)
+              )
+              Text(
+                text = "Menampilkan Citra Satelit Esri sebagai alternatif.",
+                style = MaterialTheme.typography.labelSmall.copy(color = Color(0xFFB0BEC5), fontSize = 10.sp)
+              )
+            }
+            Spacer(modifier = Modifier.width(6.dp))
+            Button(
+              onClick = {
+                selectedBaseMapLayer = BaseMapLayer.SATELLITE_ESRI
+                mapViewRef?.let { configureMapViewLayer(it, BaseMapLayer.SATELLITE_ESRI) }
+              },
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676), contentColor = Color(0xFF0D1520)),
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+              shape = RoundedCornerShape(6.dp),
+              modifier = Modifier.testTag("switch_to_esri_button")
+            ) {
+              Text("Gunakan Esri", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+          }
+        }
+      }
+
       // 2a. Floating Legenda Peta
       Card(
         modifier = Modifier
           .align(Alignment.TopStart)
-          .padding(start = 12.dp, top = 64.dp)
+          .padding(start = 12.dp, top = if (selectedBaseMapLayer == BaseMapLayer.SATELLITE_USGS) 130.dp else 64.dp)
           .testTag("map_legend_card"),
         colors = CardDefaults.cardColors(
           containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
@@ -884,64 +963,59 @@ fun MapScreen(
               )
             }
 
-            // 2. [ Layer ]
-            Box(modifier = Modifier.weight(1f)) {
-              FilledTonalButton(
-                onClick = { showLayerMenu = true },
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .height(44.dp)
-                  .testTag("layer_selector_button_dock"),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
-                shape = RoundedCornerShape(10.dp)
-              ) {
-                Icon(
-                  imageVector = Icons.Default.Layers,
-                  contentDescription = "Layer",
-                  tint = MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                  text = "Layer",
-                  style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp
-                  ),
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              }
-
-              DropdownMenu(
-                expanded = showLayerMenu,
-                onDismissRequest = { showLayerMenu = false }
-              ) {
-                BaseMapLayer.values().forEach { layer ->
-                  DropdownMenuItem(
-                    text = {
-                      Column {
-                        Text(
-                          text = layer.displayName,
-                          style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = if (selectedBaseMapLayer == layer) FontWeight.Bold else FontWeight.Normal
-                          )
-                        )
-                        Text(
-                          text = layer.providerDescription,
-                          style = MaterialTheme.typography.labelSmall,
-                          color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                      }
-                    },
-                    onClick = {
-                      selectedBaseMapLayer = layer
-                      mapViewRef?.let { configureMapViewLayer(it, layer) }
-                      showLayerMenu = false
-                    }
-                  )
+            // 2. [ Titik Panas ]
+            FilledTonalButton(
+              onClick = {
+                val validFires = fireRecords.filter { CoordinateValidator.isValid(it.latitude, it.longitude) }
+                if (validFires.isEmpty()) {
+                  val msg = if (isFiltered) "Tidak ada titik panas yang sesuai dengan penyaring." else "Belum ada titik panas untuk difokuskan."
+                  android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                } else if (validFires.size == 1) {
+                  val single = validFires.first()
+                  mapViewRef?.let { mv ->
+                    mv.controller.setZoom(15.0)
+                    mv.controller.animateTo(GeoPoint(single.latitude, single.longitude))
+                  }
+                } else {
+                  mapViewRef?.let { mv ->
+                    val minLat = validFires.minOf { it.latitude }
+                    val maxLat = validFires.maxOf { it.latitude }
+                    val minLon = validFires.minOf { it.longitude }
+                    val maxLon = validFires.maxOf { it.longitude }
+                    val centerLat = (minLat + maxLat) / 2.0
+                    val centerLon = (minLon + maxLon) / 2.0
+                    mv.controller.setZoom(12.0)
+                    mv.controller.animateTo(GeoPoint(centerLat, centerLon))
+                  }
                 }
-              }
+              },
+              modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .testTag("fit_all_hotspots_dock"),
+              contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+              shape = RoundedCornerShape(10.dp),
+              colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = Color(0xFFFF5722).copy(alpha = 0.15f),
+                contentColor = Color(0xFFFF5722)
+              )
+            ) {
+              Icon(
+                imageVector = Icons.Default.Whatshot,
+                contentDescription = "Fokus Titik Panas",
+                tint = Color(0xFFFF5722),
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = "Titik Panas",
+                style = MaterialTheme.typography.labelMedium.copy(
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 11.sp
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
             }
 
             // 3. [ Buka Peta ]
@@ -1079,10 +1153,11 @@ private fun MapStatusBar(
           )
           val mapStatusLabel = when {
             isFallbackActive -> "⚠️ SATELIT GAGAL — MENGGUNAKAN PETA STANDAR"
+            activeLayer == BaseMapLayer.SATELLITE_USGS -> "🛰️ USGS (Non-Coverage) — Esri Aktif"
             mapStatus == MapStatus.MAP_READY -> when (activeLayer) {
               BaseMapLayer.SATELLITE_ESRI -> "🛰️ Citra Satelit | Status: AKTIF"
               BaseMapLayer.OPEN_STREET_MAP -> "🗺️ Peta Standar | Status: AKTIF"
-              BaseMapLayer.SATELLITE_USGS -> "🛰️ USGS Satelit | Status: AKTIF"
+              BaseMapLayer.SATELLITE_USGS -> "🛰️ USGS (Non-Coverage) — Esri Aktif"
             }
             mapStatus == MapStatus.MAP_ERROR -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Standar Gagal" else "Peta Satelit Gagal"
             mapStatus == MapStatus.MAP_LOADING -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Memuat Peta Standar..." else "Memuat Citra Satelit..."
