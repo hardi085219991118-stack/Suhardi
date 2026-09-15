@@ -127,10 +127,11 @@ object MapTileValidator {
           .build()
 
         client.newCall(request).execute().use { response ->
-          if (response.isSuccessful) {
+          val bodyBytes = response.body?.bytes()
+          if (response.isSuccessful && bodyBytes != null && bodyBytes.isNotEmpty()) {
             Result.success(true)
           } else {
-            Result.failure(java.io.IOException("HTTP ${response.code} saat memuat tile peta ($tileUrl)"))
+            Result.failure(java.io.IOException("HTTP ${response.code} atau payload kosong saat memuat tile peta ($tileUrl)"))
           }
         }
       } catch (e: Exception) {

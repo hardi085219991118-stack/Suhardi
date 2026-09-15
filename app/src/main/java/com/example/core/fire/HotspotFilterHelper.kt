@@ -92,9 +92,9 @@ object HotspotFilterHelper {
       val matchesSat = matchesSatellite(record.satellite, criteria.satellite)
       val matchesAge = matchesAge(record, criteria.maxAgeHours, currentTimeMillis)
       val matchesDist = if (criteria.maxDistanceKm != null) {
-        if (isGpsValid && deviceLocation != null) {
+        if (isGpsValid) {
           val dist = FireHotspotShareHelper.calculateDistanceKm(
-            deviceLocation.latitude,
+            deviceLocation!!.latitude,
             deviceLocation.longitude,
             record.latitude,
             record.longitude

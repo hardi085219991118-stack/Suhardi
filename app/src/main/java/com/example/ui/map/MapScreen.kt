@@ -599,9 +599,11 @@ fun MapScreen(
                       !(fire.latitude == 0.0 && fire.longitude == 0.0)
                   }
 
+                  val flameIcon = com.example.core.map.FireMarkerIconHelper.getFlameIcon(mv.context)
                   validFires.forEach { fire ->
                     val fireMarker = Marker(mv).apply {
                       position = GeoPoint(fire.latitude, fire.longitude)
+                      icon = flameIcon
                       title = "DETEKSI TITIK PANAS NASA FIRMS"
                       val acqDateStr = fire.acqDate.ifBlank { "N/A" }
                       val acqTimeStr = if (fire.acqTime.isNotBlank()) "${fire.acqTime} UTC" else "N/A"
@@ -954,7 +956,6 @@ private fun MapStatusBar(
           LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) StatusVerified else StatusBlocked
           LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
           LocationStatus.LOCATION_ERROR, LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PROVIDER_DISABLED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> StatusBlocked
-          else -> StatusNotStarted
         }
 
         Icon(

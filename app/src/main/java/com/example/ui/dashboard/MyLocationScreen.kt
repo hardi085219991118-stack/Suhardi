@@ -177,7 +177,7 @@ fun MyLocationScreen(
 
       Spacer(modifier = Modifier.height(24.dp))
 
-      if (isLocationAvailable && location != null) {
+      if (location != null && state.locationStatus == LocationStatus.LOCATION_AVAILABLE) {
         // Info Card
         Card(
           modifier = Modifier.fillMaxWidth(),

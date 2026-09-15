@@ -75,18 +75,8 @@ fun HotspotsListScreen(
   var sortOrder by remember { mutableStateOf(HotspotSortOrder.TERBARU) }
   var showSortDropdown by remember { mutableStateOf(false) }
 
-  // Filter records using single source of truth or HotspotFilterHelper
-  val filteredRecords = remember(state.filteredFireRecords, state.fireRecords, filterCriteria, state.deviceLocation) {
-    if (state.filteredFireRecords.isNotEmpty() || state.fireRecords.isEmpty()) {
-      state.filteredFireRecords
-    } else {
-      com.example.core.fire.HotspotFilterHelper.filterRecords(
-        records = state.fireRecords,
-        criteria = filterCriteria,
-        deviceLocation = state.deviceLocation
-      )
-    }
-  }
+  // Filter records using single source of truth
+  val filteredRecords = state.filteredFireRecords
 
   // Sort records
   val sortedRecords = remember(filteredRecords, sortOrder, state.deviceLocation) {

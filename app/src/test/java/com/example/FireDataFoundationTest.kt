@@ -497,8 +497,9 @@ class FireDataFoundationTest {
     val onlineRes = repo.refreshFireData(force = true)
     assertEquals(FireDataSourceState.DATA_SOURCE_AVAILABLE, onlineRes.state)
 
-    // Second call: offline
+    // Second call: offline (advance past cooldown window)
     isOffline = true
+    repo.resetCooldownForTesting()
     val cachedRes = repo.refreshFireData(force = true)
     assertEquals(FireDataSourceState.CACHED, cachedRes.state)
     assertTrue(cachedRes.isCached)
@@ -576,7 +577,7 @@ class FireDataFoundationTest {
 
   // Test 36: FIRE-006 registry status
   @Test
-  fun `test 36 FIRE-006 registry status is LIVE_DATA_VERIFIED`() {
+  fun `test 36 FIRE-006 registry status is UNIT_TEST_VERIFIED`() {
     val fire006 = FeatureRegistry.getFeature("FIRE-006")
     val fire007 = FeatureRegistry.getFeature("FIRE-007")
     val fire008 = FeatureRegistry.getFeature("FIRE-008")
@@ -585,9 +586,9 @@ class FireDataFoundationTest {
     assertNotNull(fire007)
     assertNotNull(fire008)
 
-    assertEquals(FeatureStatus.LIVE_DATA_VERIFIED, fire006!!.status)
-    assertEquals(FeatureStatus.DATA_PROCESSING_VERIFIED, fire007!!.status)
-    assertEquals(FeatureStatus.MARKERS_VERIFIED, fire008!!.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire006!!.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire007!!.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire008!!.status)
   }
 
   // Test 37: HTTP 404 Not Found handling

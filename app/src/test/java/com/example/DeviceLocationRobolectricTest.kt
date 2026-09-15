@@ -373,13 +373,13 @@ class DeviceLocationRobolectricTest {
   @Test
   fun `test zero fire markers policy across registries Prompt 005C`() {
     val fire006 = com.example.core.registry.FeatureRegistry.getFeature("FIRE-006")
-    assertEquals(com.example.core.contract.FeatureStatus.LIVE_DATA_VERIFIED, fire006?.status)
+    assertEquals(com.example.core.contract.FeatureStatus.UNIT_TEST_VERIFIED, fire006?.status)
 
     val fire007 = com.example.core.registry.FeatureRegistry.getFeature("FIRE-007")
-    assertEquals(com.example.core.contract.FeatureStatus.DATA_PROCESSING_VERIFIED, fire007?.status)
+    assertEquals(com.example.core.contract.FeatureStatus.UNIT_TEST_VERIFIED, fire007?.status)
 
     val fire008 = com.example.core.registry.FeatureRegistry.getFeature("FIRE-008")
-    assertEquals(com.example.core.contract.FeatureStatus.MARKERS_VERIFIED, fire008?.status)
+    assertEquals(com.example.core.contract.FeatureStatus.UNIT_TEST_VERIFIED, fire008?.status)
   }
 
   private class FakeLocationTracker : LocationTracker {

@@ -34,18 +34,18 @@ class FireDataProcessingAndMarkerTest {
 
   // 1. Feature Registry Verification
   @Test
-  fun `FIRE-007 status is DATA_PROCESSING_VERIFIED with correct metadata in FeatureRegistry`() {
+  fun `FIRE-007 status is UNIT_TEST_VERIFIED with correct metadata in FeatureRegistry`() {
     val feature = FeatureRegistry.getFeature("FIRE-007")
     assertNotNull(feature)
-    assertEquals(FeatureStatus.DATA_PROCESSING_VERIFIED, feature?.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, feature?.status)
     assertEquals("Fire Data Processing", feature?.name)
   }
 
   @Test
-  fun `FIRE-008 status is MARKERS_VERIFIED with correct metadata in FeatureRegistry`() {
+  fun `FIRE-008 status is UNIT_TEST_VERIFIED with correct metadata in FeatureRegistry`() {
     val feature = FeatureRegistry.getFeature("FIRE-008")
     assertNotNull(feature)
-    assertEquals(FeatureStatus.MARKERS_VERIFIED, feature?.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, feature?.status)
     assertEquals("Verified Satellite Hotspot Markers", feature?.name)
   }
 

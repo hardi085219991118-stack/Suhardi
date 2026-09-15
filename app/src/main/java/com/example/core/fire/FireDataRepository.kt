@@ -52,6 +52,11 @@ class RealFireDataRepository(
   private var rateLimitBackoffUntilMillis: Long = 0L
   private var cachedResponse: FireDataResponse? = null
 
+  fun resetCooldownForTesting() {
+    lastRequestTimeMillis = 0L
+    rateLimitBackoffUntilMillis = 0L
+  }
+
   override suspend fun refreshFireData(
     force: Boolean,
     areaCoordinates: String
@@ -80,7 +85,7 @@ class RealFireDataRepository(
       return response
     }
 
-    // 2. Rate Limit Cooldown (Section 10)
+    // 2. Rate Limit Cooldown (Section 10 & Critical Cooldown Lock)
     if (now < rateLimitBackoffUntilMillis) {
       val remainingSec = (rateLimitBackoffUntilMillis - now) / 1000
       val response = FireDataResponse.error(
@@ -92,8 +97,10 @@ class RealFireDataRepository(
       return response
     }
 
-    if (!force && (now - lastRequestTimeMillis) < NasaFirmsConstants.MIN_REQUEST_INTERVAL_MS) {
-      // Cooldown active, return current response or cached data without hitting API
+    // Single source of truth cooldown: NO caller can bypass cooldown, even if force=true
+    if ((now - lastRequestTimeMillis) < NasaFirmsConstants.MIN_REQUEST_INTERVAL_MS) {
+      val remainingSec = (NasaFirmsConstants.MIN_REQUEST_INTERVAL_MS - (now - lastRequestTimeMillis)) / 1000
+      AppLogger.recordEvent("COOLDOWN_ACTIVE: Sisa $remainingSec detik. Permintaan HTTP ditahan.")
       val existing = _fireDataResponse.value
       if (existing.state != FireDataSourceState.NOT_VERIFIED) {
         return existing
@@ -143,29 +150,37 @@ class RealFireDataRepository(
       }
 
       lastErrorResponse = response
-      // If error is network/timeout, no need to retry other sensors with same network
+      // If error is network/timeout or 5xx server error, break loop immediately
       if (response.state == FireDataSourceState.NETWORK_ERROR ||
-        response.state == FireDataSourceState.TIMEOUT
+        response.state == FireDataSourceState.TIMEOUT ||
+        response.httpStatusCode in listOf(500, 502, 503)
       ) {
         break
       }
     }
 
-    // 4. Offline / Failure Handling with Cache (Section 18 & 19)
+    // 4. Offline / Failure Handling with Cache (Section 11: Fresh, Stale, Expired)
     val fallbackCache = cachedResponse
-    if (fallbackCache != null && (now - fallbackCache.fetchTimeMillis) < (24 * 60 * 60 * 1000L)) {
+    if (fallbackCache != null) {
       val cacheAge = now - fallbackCache.fetchTimeMillis
-      val cached = fallbackCache.copy(
-        state = FireDataSourceState.CACHED,
-        isCached = true,
-        cacheAgeMillis = cacheAge
-      )
-      AppLogger.recordEvent(
-        "Menampilkan data satelit dari Cache lokal (usia ${cacheAge / 1000} detik). Status: CACHED"
-      )
-      _fireDataResponse.value = cached
-      _dataSourceState.value = FireDataSourceState.CACHED
-      return cached
+      if (cacheAge < (24 * 60 * 60 * 1000L)) {
+        val isFresh = cacheAge < NasaFirmsConstants.CACHE_EXPIRY_MS
+        val statusNote = if (isFresh) "FRESH CACHE" else "STALE CACHE"
+        val cached = fallbackCache.copy(
+          state = FireDataSourceState.CACHED,
+          isCached = true,
+          cacheAgeMillis = cacheAge,
+          diagnosticDetail = "Data tersimpan — bukan pembacaan langsung."
+        )
+        AppLogger.recordEvent(
+          "Menampilkan data satelit dari $statusNote lokal (usia ${cacheAge / 1000} detik). Status: CACHED"
+        )
+        _fireDataResponse.value = cached
+        _dataSourceState.value = FireDataSourceState.CACHED
+        return cached
+      } else {
+        AppLogger.recordEvent("EXPIRED CACHE: Usia data melebihi 24 jam. Cache diabaikan.")
+      }
     }
 
     val finalResponse = lastErrorResponse ?: FireDataResponse.error(

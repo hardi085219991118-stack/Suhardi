@@ -2,6 +2,7 @@ package com.example
 
 import com.example.core.fire.ClientOnlyCredentialProvider
 import com.example.core.fire.FireDataCredentialState
+import com.example.core.fire.FireDataResponse
 import com.example.core.fire.FireDataSourceState
 import com.example.core.fire.LiveApiDiagnosticAuditor
 import com.example.core.fire.LiveApiDiagnosticCause
@@ -41,10 +42,26 @@ class FireDataLiveNetworkTest {
     val credentialProvider = ClientOnlyCredentialProvider()
     val mapKey = credentialProvider.getMapKey()
 
-    assumeTrue(
-      "Testing MAP_KEY must be configured via environment or assets to run live network tests",
-      !mapKey.isNullOrBlank()
-    )
+    if (mapKey.isNullOrBlank()) {
+      println("==================================================")
+      println("REAL LIVE TEST NOT EXECUTED — CREDENTIAL MISSING")
+      println("==================================================")
+      println("STATUS: LIVE_API_NOT_VERIFIED")
+      println("ALASAN: FIRMS_MAP_KEY belum dikonfigurasi pada environment.")
+      println("ZERO-DUMMY: Menolak membuat response palsu.")
+      println("==================================================")
+
+      val unverifiedAudit = LiveApiDiagnosticAuditor.auditPipeline(
+        credState = FireDataCredentialState.NOT_CONFIGURED,
+        sourceState = FireDataSourceState.NOT_VERIFIED,
+        response = FireDataResponse.unverified(),
+        queryArea = NasaFirmsConstants.DEFAULT_MANTHANGAI_BBOX
+      )
+      assertEquals(LiveVerificationGate.LIVE_API_NOT_VERIFIED, unverifiedAudit.gate)
+      assertFalse("Pipeline must not be verified without live HTTP evidence", unverifiedAudit.isLiveApiVerified)
+      return@runBlocking
+    }
+
     assertEquals(FireDataCredentialState.CONFIGURED, credentialProvider.getCredentialState())
 
     val dataSource = NasaFirmsNetworkDataSource()

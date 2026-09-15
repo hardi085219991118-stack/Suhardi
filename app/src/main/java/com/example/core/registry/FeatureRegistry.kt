@@ -22,8 +22,8 @@ object FeatureRegistry {
       successCriteria = "Semua aturan absolut terdokumentasi dan diimplementasikan tanpa dummy",
       failureCriteria = "Adanya data dummy, koordinat palsu, atau klaim tidak terverifikasi",
       testProcedure = "Audit statis kode, verifikasi integritas arsitektur",
-      verificationLevel = "GATE 3: RUNTIME VERIFIED (LOCAL)",
-      status = FeatureStatus.RUNTIME_VERIFIED
+      verificationLevel = "GATE 1: UNIT TEST VERIFIED",
+      status = FeatureStatus.UNIT_TEST_VERIFIED
     ),
     FeatureContract(
       id = "FIRE-002",
@@ -37,8 +37,8 @@ object FeatureRegistry {
       successCriteria = "Gradle build sukses, unit test Robolectric lolos",
       failureCriteria = "Kompilasi error atau kegagalan konfigurasi project",
       testProcedure = "compile_applet & gradle unit test",
-      verificationLevel = "GATE 3: RUNTIME VERIFIED (LOCAL)",
-      status = FeatureStatus.RUNTIME_VERIFIED
+      verificationLevel = "GATE 2: BUILD VERIFIED",
+      status = FeatureStatus.BUILD_VERIFIED
     ),
     FeatureContract(
       id = "FIRE-003",
@@ -52,8 +52,8 @@ object FeatureRegistry {
       successCriteria = "Judul, system status, location card, fire detection card, satellite data card, dan last update tampil tanpa data dummy",
       failureCriteria = "Menampilkan marker atau angka palsu, klaim GPS/satelit aktif padahal belum diintegrasikan",
       testProcedure = "Robolectric Compose UI test & Activity launch test",
-      verificationLevel = "GATE 3: RUNTIME VERIFIED (LOCAL)",
-      status = FeatureStatus.RUNTIME_VERIFIED,
+      verificationLevel = "GATE 1: UNIT TEST VERIFIED",
+      status = FeatureStatus.UNIT_TEST_VERIFIED,
       knownLimitations = "Status GPS fisik perangkat nyata menunggu verifikasi lapangan 13 kriteria. Data satelit NASA FIRMS terhubung dinamis via MAP_KEY."
     ),
     FeatureContract(
@@ -84,8 +84,8 @@ object FeatureRegistry {
       successCriteria = "MapView berhasil memuat tile citra Esri pada viewport aktual dan status peta mencerminkan keadaan tile yang sebenarnya.",
       failureCriteria = "Marker contoh dibuat tanpa data nyata, hardcoded dummy coordinates, atau penambahan marker api sebelum FIRE-006",
       testProcedure = "Robolectric MapFoundationRobolectricTest, CoordinateValidator boundary test, MapStatus lifecycle test, Dashboard integration test",
-      verificationLevel = "GATE 2: REAL_DEVICE_VERIFICATION_PENDING (REAL DEVICE GPS NOT VERIFIED)",
-      status = FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING,
+      verificationLevel = "GATE 1: UNIT TEST VERIFIED",
+      status = FeatureStatus.UNIT_TEST_VERIFIED,
       knownLimitations = "REAL DEVICE GPS NOT VERIFIED: APK telah diuji pada perangkat fisik Android dan peta memusatkan marker pada koordinat GPS riil pengguna. Status formal verifikasi lapangan fisik tetap REAL_DEVICE_VERIFICATION_PENDING hingga 13 kriteria audit Prompt 005C terpenuhi."
     ),
     FeatureContract(
@@ -100,9 +100,9 @@ object FeatureRegistry {
       successCriteria = "Response NASA FIRMS valid menghasilkan record otentik; jika gagal menampilkan status jujur (API_CREDENTIAL_REQUIRED / NETWORK_ERROR / TIMEOUT / DATA_SOURCE_UNAVAILABLE); count unknown saat gagal; count 0 hanya jika response valid dengan 0 deteksi; zero fire markers",
       failureCriteria = "Penggunaan titik api dummy, koordinat palsu, timestamp tiruan dari waktu HP, atau menampilkan 0 api saat request gagal",
       testProcedure = "Unit tests parser CSV FIRMS, validasi rentang koordinat, simulasi response HTTP 200/400/401/403/429/500/timeout, dan Robolectric UI tests",
-      verificationLevel = "GATE 3: LIVE_DATA_VERIFIED (NASA FIRMS HTTP 200)",
-      status = FeatureStatus.LIVE_DATA_VERIFIED,
-      knownLimitations = "Fondasi data satelit aktif (VIIRS/MODIS). Data diproses melalui pipeline FIRE-007 dan dirender pada peta melalui FIRE-008."
+      verificationLevel = "GATE 1: UNIT TEST VERIFIED",
+      status = FeatureStatus.UNIT_TEST_VERIFIED,
+      knownLimitations = "Fondasi parser dan pipeline data satelit diverifikasi unit test. Status live API bergantung pada konfigurasi MAP_KEY."
     ),
     FeatureContract(
       id = "FIRE-007",
@@ -116,8 +116,8 @@ object FeatureRegistry {
       successCriteria = "Record divalidasi ketat (-90..90, -180..180, bukan 0/0 anomali, UTC timestamp terbukti), usia data dikelompokkan jujur",
       failureCriteria = "Penggunaan record korup, modifikasi timestamp tiruan, atau pembuatan titik sintetis",
       testProcedure = "Unit test parsing CSV, validasi koordinat, kalkulasi usia data satelit",
-      verificationLevel = "GATE 3: DATA_PROCESSING_VERIFIED",
-      status = FeatureStatus.DATA_PROCESSING_VERIFIED,
+      verificationLevel = "GATE 1: UNIT TEST VERIFIED",
+      status = FeatureStatus.UNIT_TEST_VERIFIED,
       knownLimitations = "Hanya memproses hotspot yang memenuhi validasi koordinat dan timestamp UTC dari overpass satelit."
     ),
     FeatureContract(
@@ -125,15 +125,15 @@ object FeatureRegistry {
       name = "Verified Satellite Hotspot Markers",
       purpose = "Rendering marker titik api pada MapView osmdroid berdasarkan data satelit otentik yang terverifikasi.",
       input = "List<FireDataRecord> valid dan FireDataSourceState dari FIRE-007",
-      process = "Menambahkan marker titik api pada koordinat nyata satelit HANYA saat status data adalah DATA_SOURCE_AVAILABLE atau CACHED dengan record valid; menampilkan dialog detail otentik saat marker disentuh; layer toggle base map.",
-      output = "Marker titik api terverifikasi pada peta geografis dengan detail akuisisi lengkap",
+      process = "Menambahkan marker visual flame (🔥) pada koordinat nyata satelit HANYA saat status data adalah DATA_SOURCE_AVAILABLE atau CACHED dengan record valid; menampilkan dialog detail otentik saat marker disentuh; layer toggle base map.",
+      output = "Marker titik api terverifikasi pada peta geografis dengan icon flame dan detail akuisisi lengkap",
       dataSource = "FIRE-007 (NASA FIRMS Hotspots)",
       dependencies = listOf("FIRE-005", "FIRE-007"),
       successCriteria = "Marker titik api hanya dirender jika data nyata tersedia; menampilkan 0 marker jika data unverified atau query 0 deteksi; detail marker jujur",
       failureCriteria = "Marker api muncul dari data palsu, posisi HP dijadikan marker api, atau marker dibuat saat data belum terverifikasi",
       testProcedure = "Robolectric UI test rendering marker saat data tersedia vs unverified",
-      verificationLevel = "GATE 3: MARKERS_VERIFIED",
-      status = FeatureStatus.MARKERS_VERIFIED,
+      verificationLevel = "GATE 1: UNIT TEST VERIFIED",
+      status = FeatureStatus.UNIT_TEST_VERIFIED,
       knownLimitations = "Marker titik api bergantung pada ketersediaan koneksi internet dan MAP_KEY resmi NASA FIRMS."
     )
   )

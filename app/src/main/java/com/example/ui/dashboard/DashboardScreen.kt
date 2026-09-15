@@ -223,7 +223,7 @@ fun DashboardScreen(
       deviceLocation = state.deviceLocation,
       locationStatus = state.locationStatus,
       locationErrorMessage = state.locationErrorMessage,
-      fireRecords = if (state.filteredFireRecords.isNotEmpty() || state.fireRecords.isEmpty()) state.filteredFireRecords else state.fireRecords,
+      fireRecords = state.filteredFireRecords,
       totalFireRecordsCount = state.fireRecords.size,
       filterCriteria = state.filterCriteria,
       onOpenFilter = { showFilterDialog = true },
@@ -415,7 +415,7 @@ fun DashboardScreen(
           deviceLocation = state.deviceLocation,
           locationStatus = state.locationStatus,
           locationErrorMessage = state.locationErrorMessage,
-          fireRecords = if (state.filteredFireRecords.isNotEmpty() || state.fireRecords.isEmpty()) state.filteredFireRecords else state.fireRecords,
+          fireRecords = state.filteredFireRecords,
           totalFireRecordsCount = state.fireRecords.size,
           filterCriteria = state.filterCriteria,
           onOpenFilter = { showFilterDialog = true },
@@ -2128,15 +2128,15 @@ fun MapFoundationCard(
 
       val fireMarkersNotice = when {
         state.fireDataSourceState == com.example.core.fire.FireDataSourceState.DATA_SOURCE_AVAILABLE && state.fireRecords.isNotEmpty() ->
-          "DETEKSI TITIK PANAS NASA FIRMS: ${state.fireRecords.size} MARKER (FIRE-008 AKTIF)"
+          "DETEKSI TITIK PANAS NASA FIRMS: ${state.fireRecords.size} TITIK PANAS"
         state.fireDataSourceState == com.example.core.fire.FireDataSourceState.NO_DETECTIONS_IN_QUERY ->
-          "0 DETEKSI TITIK PANAS DALAM OVERPASS SATELIT (FIRE-008)"
+          "0 DETEKSI TITIK PANAS DALAM OVERPASS SATELIT"
         state.fireDataSourceState == com.example.core.fire.FireDataSourceState.CACHED && state.fireRecords.isNotEmpty() ->
-          "TITIK PANAS SESSION CACHE: ${state.fireRecords.size} MARKER (FIRE-008)"
+          "DATA TERSIMPAN: ${state.fireRecords.size} TITIK PANAS"
         state.credentialState == com.example.core.fire.FireDataCredentialState.CONFIGURED ->
-          "MAP_KEY TERKONFIGURASI — TEKAN PERBARUI DATA UNTUK MARKER FIRE-008"
+          "KUNCI TERSEDIA — TEKAN PERBARUI DATA UNTUK MEMUAT TITIK PANAS"
         else ->
-          "DATA SATELIT BELUM DIVERIFIKASI — MARKER TITIK PANAS DITAHAN (ZERO-DUMMY)"
+          "DATA SATELIT BELUM TERSEDIA — MENUNGGU PEMBARUAN DATA"
       }
       val fireMarkersNoticeColor = when {
         state.fireDataSourceState == com.example.core.fire.FireDataSourceState.DATA_SOURCE_AVAILABLE ||

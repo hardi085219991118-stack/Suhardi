@@ -128,21 +128,21 @@ class MapFoundationRobolectricTest {
     val fire005 = FeatureRegistry.getFeature("FIRE-005")
     assertNotNull("FIRE-005 must exist in registry", fire005)
     assertEquals(
-      "FIRE-005 must be REAL_DEVICE_VERIFICATION_PENDING until physical device verification (Section 13 & 14)",
-      FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING,
+      "FIRE-005 must be UNIT_TEST_VERIFIED in registry",
+      FeatureStatus.UNIT_TEST_VERIFIED,
       fire005?.status
     )
 
-    // Section 2: FIRE-006, FIRE-007, and FIRE-008 Verified
+    // Honest Evidence-Based Registry statuses
     val fire006 = FeatureRegistry.getFeature("FIRE-006")
     assertNotNull("FIRE-006 must exist in registry", fire006)
-    assertEquals("FIRE-006 must be LIVE_DATA_VERIFIED", FeatureStatus.LIVE_DATA_VERIFIED, fire006?.status)
+    assertEquals("FIRE-006 must be UNIT_TEST_VERIFIED", FeatureStatus.UNIT_TEST_VERIFIED, fire006?.status)
 
     val fire007 = FeatureRegistry.getFeature("FIRE-007")
-    assertEquals("FIRE-007 is DATA_PROCESSING_VERIFIED", FeatureStatus.DATA_PROCESSING_VERIFIED, fire007?.status)
+    assertEquals("FIRE-007 is UNIT_TEST_VERIFIED", FeatureStatus.UNIT_TEST_VERIFIED, fire007?.status)
 
     val fire008 = FeatureRegistry.getFeature("FIRE-008")
-    assertEquals("FIRE-008 is MARKERS_VERIFIED", FeatureStatus.MARKERS_VERIFIED, fire008?.status)
+    assertEquals("FIRE-008 is UNIT_TEST_VERIFIED", FeatureStatus.UNIT_TEST_VERIFIED, fire008?.status)
   }
 
   @Test
@@ -302,6 +302,6 @@ class MapFoundationRobolectricTest {
     assertNotNull(mapContract)
     assertFalse(mapContract!!.purpose.contains("-2.58"))
     assertFalse(mapContract.output.contains("114.44"))
-    assertEquals(FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING, mapContract.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, mapContract.status)
   }
 }

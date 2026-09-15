@@ -245,7 +245,6 @@ private fun RingkasanTabContent(state: DashboardState) {
           LocationStatus.LOCATION_AVAILABLE -> StatusVerified
           LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
           LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PROVIDER_DISABLED, LocationStatus.LOCATION_ERROR -> StatusBlocked
-          else -> StatusNotStarted
         }
         StatusItemRow(
           title = "Lokasi Perangkat",
@@ -258,20 +257,20 @@ private fun RingkasanTabContent(state: DashboardState) {
         val (mapSubtitle, mapBadge, mapColor) = when (state.mapStatus) {
           com.example.ui.map.MapStatus.MAP_LOADING -> {
             val text = if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
-              "Memuat peta jalan..."
+              "Memuat peta referensi (OSM)..."
             else
               "Memuat citra satelit..."
             Triple(text, "MEMUAT", MaterialTheme.colorScheme.primary)
           }
           com.example.ui.map.MapStatus.MAP_READY -> {
             if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
-              Triple("Peta Jalan Siap", "PETA JALAN", StatusVerified)
+              Triple("Peta referensi tersedia (OSM)", "PETA REFERENSI", StatusVerified)
             else
               Triple("Citra Satelit Siap", "CITRA SATELIT", StatusVerified)
           }
           com.example.ui.map.MapStatus.MAP_ERROR -> {
             val text = if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
-              "Peta jalan tidak dapat dimuat. Periksa koneksi internet."
+              "Peta referensi tidak dapat dimuat. Periksa koneksi internet."
             else
               "Citra satelit tidak dapat dimuat. Periksa koneksi internet."
             Triple(text, "GAGAL", StatusBlocked)

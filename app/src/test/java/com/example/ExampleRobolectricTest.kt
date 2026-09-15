@@ -34,54 +34,51 @@ class ExampleRobolectricTest {
     val fire001 = FeatureRegistry.getFeature("FIRE-001")
     assertNotNull(fire001)
     assertEquals("Master Development Contract", fire001?.name)
-    assertEquals(FeatureStatus.RUNTIME_VERIFIED, fire001?.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire001?.status)
 
     val fire002 = FeatureRegistry.getFeature("FIRE-002")
     assertNotNull(fire002)
     assertEquals("Android Project Foundation", fire002?.name)
-    assertEquals(FeatureStatus.RUNTIME_VERIFIED, fire002?.status)
+    assertEquals(FeatureStatus.BUILD_VERIFIED, fire002?.status)
 
-    // Prompt 003: FIRE-003 is RUNTIME_VERIFIED
     val fire003 = FeatureRegistry.getFeature("FIRE-003")
     assertNotNull(fire003)
     assertEquals("Dashboard", fire003?.name)
-    assertEquals(FeatureStatus.RUNTIME_VERIFIED, fire003?.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire003?.status)
 
-    // Prompt 005B: FIRE-004 status must be REAL_DEVICE_VERIFICATION_PENDING (Hardware GPS pending physical verification)
     val fire004 = FeatureRegistry.getFeature("FIRE-004")
     assertNotNull(fire004)
     assertEquals("Device GPS", fire004?.name)
     assertEquals(
-      "Feature FIRE-004 must be REAL_DEVICE_VERIFICATION_PENDING on Prompt 005B",
+      "Feature FIRE-004 must be REAL_DEVICE_VERIFICATION_PENDING",
       FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING,
       fire004?.status
     )
 
-    // Prompt 005A: FIRE-005 status must be REAL_DEVICE_VERIFICATION_PENDING (PRODUCTION_READY revoked)
     val fire005 = FeatureRegistry.getFeature("FIRE-005")
     assertNotNull(fire005)
     assertEquals("Map Foundation", fire005?.name)
     assertEquals(
-      "Feature FIRE-005 must be REAL_DEVICE_VERIFICATION_PENDING on Prompt 005A",
-      FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING,
+      "Feature FIRE-005 must be UNIT_TEST_VERIFIED",
+      FeatureStatus.UNIT_TEST_VERIFIED,
       fire005?.status
     )
 
     val fire006 = FeatureRegistry.getFeature("FIRE-006")
     assertNotNull(fire006)
     assertEquals(
-      "Feature FIRE-006 must be LIVE_DATA_VERIFIED",
-      FeatureStatus.LIVE_DATA_VERIFIED,
+      "Feature FIRE-006 must be UNIT_TEST_VERIFIED",
+      FeatureStatus.UNIT_TEST_VERIFIED,
       fire006?.status
     )
 
     val fire007 = FeatureRegistry.getFeature("FIRE-007")
     assertNotNull(fire007)
-    assertEquals(FeatureStatus.DATA_PROCESSING_VERIFIED, fire007?.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire007?.status)
 
     val fire008 = FeatureRegistry.getFeature("FIRE-008")
     assertNotNull(fire008)
-    assertEquals(FeatureStatus.MARKERS_VERIFIED, fire008?.status)
+    assertEquals(FeatureStatus.UNIT_TEST_VERIFIED, fire008?.status)
     assertEquals("Verified Satellite Hotspot Markers", fire008?.name)
   }
 

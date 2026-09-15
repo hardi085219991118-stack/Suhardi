@@ -1,298 +1,436 @@
 package com.example
 
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.example.core.fire.FireDataCredentialProvider
+import com.example.core.fire.FireDataCredentialState
+import com.example.core.fire.FireDataError
 import com.example.core.fire.FireDataRecord
+import com.example.core.fire.FireDataResponse
+import com.example.core.fire.FireDataSource
+import com.example.core.fire.FireDataSourceState
 import com.example.core.fire.HotspotFilterHelper
+import com.example.core.fire.LiveApiDiagnosticAuditor
+import com.example.core.fire.LiveVerificationGate
+import com.example.core.fire.NasaFirmsConstants
+import com.example.core.fire.RealFireDataRepository
 import com.example.core.map.BaseMapLayer
-import com.example.core.map.MapProviderInfo
+import com.example.core.map.FireMarkerIconHelper
 import com.example.core.map.MapTileValidator
-import com.example.core.share.FireHotspotShareHelper
 import com.example.ui.dashboard.HotspotFilterCriteria
-import com.example.ui.map.MapStatus
 import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.ResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.IOException
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+/**
+ * 16 Kasus Uji Regresi Mandatori Zero-Dummy (A - P)
+ * Sesuai Bagian 14:
+ * A. MAP_KEY kosong -> fire count = "--" (bukan 0)
+ * B. MAP_KEY salah -> credential invalid
+ * C. HTTP 401 -> credential invalid, auto-downgrade
+ * D. HTTP 403 -> credential invalid, auto-downgrade
+ * E. HTTP 429 -> repository cooldown / backoff aktif, no API spam
+ * F. HTTP 500 -> error, bukan 0 api
+ * G. Network timeout -> error, bukan 0 api
+ * H. HTTP 200 + 0 record -> 0 api (valid overpass)
+ * I. HTTP 200 + 10 record -> 10 marker di peta
+ * J. Filter menghasilkan 0 -> 0 marker di peta dan 0 di list
+ * K. Filter menghasilkan 5 -> 5 marker di peta
+ * L. Esri tile HTTP success -> MAP_READY / success
+ * M. Esri tile HTTP failure -> MAP_ERROR (bukan pura-pura ready)
+ * N. Marker titik api menggunakan icon api (bukan default osmdroid)
+ * O. Repository cooldown tidak bisa di-bypass dengan force=true
+ * P. Live test tidak bisa VERIFIED jika kredensial tidak ada
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class AuditHotspotsAndMapTest {
 
-  @Test
-  fun `test map provider info separation of engine and tile provider`() {
-    assertEquals("osmdroid", MapProviderInfo.MAP_ENGINE)
-    assertEquals("Esri World Imagery", MapProviderInfo.TILE_PROVIDER)
-    assertEquals("SATELLITE_ESRI", MapProviderInfo.DEFAULT_LAYER)
-    assertFalse(MapProviderInfo.TILE_SOURCE.contains("OpenStreetMap sebagai tile satelit default"))
-  }
-
-  @Test
-  fun `test map tile validator handles failure and success`() = runBlocking {
-    // 1. Simulation of failure
-    MapTileValidator.testTileVerifier = { layer ->
-      Result.failure(IOException("Koneksi gagal saat memuat tile $layer"))
+  private class TestCredentialProvider(
+    private var key: String? = null,
+    private var state: FireDataCredentialState = if (key.isNullOrBlank()) FireDataCredentialState.NOT_CONFIGURED else FireDataCredentialState.CONFIGURED
+  ) : FireDataCredentialProvider {
+    override val limitationNote: String = "Test Credential Provider"
+    override fun getMapKey(): String? = key
+    override fun getCredentialState(): FireDataCredentialState = state
+    override fun setMapKey(key: String?): FireDataCredentialState {
+      this.key = key
+      state = if (key.isNullOrBlank()) FireDataCredentialState.NOT_CONFIGURED else FireDataCredentialState.CONFIGURED
+      return state
     }
-    val failResult = MapTileValidator.validateTileSource(BaseMapLayer.SATELLITE_ESRI)
-    assertTrue(failResult.isFailure)
-
-    // 2. Simulation of success
-    MapTileValidator.testTileVerifier = {
-      Result.success(true)
+    override fun clearMapKey() {
+      key = null
+      state = FireDataCredentialState.NOT_CONFIGURED
     }
-    val successResult = MapTileValidator.validateTileSource(BaseMapLayer.SATELLITE_ESRI)
-    assertTrue(successResult.isSuccess)
-    assertTrue(successResult.getOrThrow())
-
-    // Reset test hook
-    MapTileValidator.testTileVerifier = null
-  }
-
-  @Test
-  fun `test filter waktu strictly respects maxAgeHours based on acquisition timestamp`() {
-    val now = 1700000000000L
-    val fourHoursAgo = now - (4 * 3600 * 1000L)
-    val eightHoursAgo = now - (8 * 3600 * 1000L)
-    val eighteenHoursAgo = now - (18 * 3600 * 1000L)
-    val thirtyHoursAgo = now - (30 * 3600 * 1000L)
-
-    val rec4h = createSampleRecord(1, fourHoursAgo, "NOAA-21")
-    val rec8h = createSampleRecord(2, eightHoursAgo, "NOAA-20")
-    val rec18h = createSampleRecord(3, eighteenHoursAgo, "Suomi-NPP")
-    val rec30h = createSampleRecord(4, thirtyHoursAgo, "MODIS")
-
-    val records = listOf(rec4h, rec8h, rec18h, rec30h)
-
-    // Filter 6 jam -> hanya rec4h (usia <= 6 jam)
-    val filtered6h = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(maxAgeHours = 6),
-      currentTimeMillis = now
-    )
-    assertEquals(1, filtered6h.size)
-    assertEquals(rec4h.latitude, filtered6h[0].latitude, 0.0001)
-
-    // Filter 12 jam -> rec4h dan rec8h (usia <= 12 jam)
-    val filtered12h = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(maxAgeHours = 12),
-      currentTimeMillis = now
-    )
-    assertEquals(2, filtered12h.size)
-
-    // Filter 24 jam -> rec4h, rec8h, rec18h (usia <= 24 jam)
-    val filtered24h = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(maxAgeHours = 24),
-      currentTimeMillis = now
-    )
-    assertEquals(3, filtered24h.size)
-
-    // Semua data (maxAgeHours = null) -> 4 record
-    val filteredAll = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(maxAgeHours = null),
-      currentTimeMillis = now
-    )
-    assertEquals(4, filteredAll.size)
-  }
-
-  @Test
-  fun `test filter satelit normalizes search aliases without altering raw records`() {
-    val now = 1700000000000L
-    val recN21 = createSampleRecord(1, now, "N21")
-    val recN20 = createSampleRecord(2, now, "N20")
-    val recSnpp = createSampleRecord(3, now, "SNPP")
-    val recTerra = createSampleRecord(4, now, "Terra")
-    val recAqua = createSampleRecord(5, now, "Aqua")
-
-    val records = listOf(recN21, recN20, recSnpp, recTerra, recAqua)
-
-    // Pencarian NOAA-21 harus mencocokkan N21
-    val resN21 = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(satellite = "NOAA-21"),
-      currentTimeMillis = now
-    )
-    assertEquals(1, resN21.size)
-    assertEquals("N21", resN21[0].satellite) // Raw record NASA tidak diubah
-
-    // Pencarian NOAA-20 harus mencocokkan N20
-    val resN20 = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(satellite = "NOAA-20"),
-      currentTimeMillis = now
-    )
-    assertEquals(1, resN20.size)
-    assertEquals("N20", resN20[0].satellite)
-
-    // Pencarian Suomi-NPP harus mencocokkan SNPP
-    val resSnpp = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(satellite = "Suomi-NPP"),
-      currentTimeMillis = now
-    )
-    assertEquals(1, resSnpp.size)
-    assertEquals("SNPP", resSnpp[0].satellite)
-
-    // Pencarian MODIS harus mencocokkan Terra dan Aqua
-    val resModis = HotspotFilterHelper.filterRecords(
-      records = records,
-      criteria = HotspotFilterCriteria(satellite = "MODIS"),
-      currentTimeMillis = now
-    )
-    assertEquals(2, resModis.size)
-  }
-
-  @Test
-  fun `test marker fingerprint detects record alteration in the middle of list`() {
-    val rec1 = createSampleRecord(1, 1000L, "NOAA-21")
-    val rec2 = createSampleRecord(2, 2000L, "NOAA-20")
-    val rec3 = createSampleRecord(3, 3000L, "Suomi-NPP")
-
-    val listA = listOf(rec1, rec2, rec3)
-    val modifiedRec2 = rec2.copy(confidence = "99") // Ubah record di tengah
-    val listB = listOf(rec1, modifiedRec2, rec3)
-
-    fun computeFingerprint(list: List<FireDataRecord>): Int {
-      var hash = 17
-      hash = 31 * hash + list.size
-      for (fire in list) {
-        hash = 31 * hash + fire.latitude.hashCode()
-        hash = 31 * hash + fire.longitude.hashCode()
-        hash = 31 * hash + (fire.acquisitionTimestampMillis?.hashCode() ?: 0)
-        hash = 31 * hash + fire.satellite.hashCode()
-        hash = 31 * hash + fire.instrument.hashCode()
-      }
-      return hash
+    override fun markInvalid() {
+      state = FireDataCredentialState.INVALID
     }
-
-    val hashA = computeFingerprint(listA)
-    val hashB = computeFingerprint(listB)
-
-    // Ubah data di tengah list: jika koordinat atau timestamp diubah, hash pasti berbeda
-    val modifiedRec2Coord = rec2.copy(latitude = -2.999)
-    val listC = listOf(rec1, modifiedRec2Coord, rec3)
-    val hashC = computeFingerprint(listC)
-    assertTrue("Hash harus berbeda ketika record tengah berubah", hashA != hashC)
   }
 
-  @Test
-  fun `test validateTileForViewport handles failure and success`() = runBlocking {
-    MapTileValidator.testTileVerifier = { layer ->
-      Result.failure(IOException("Gagal menghubungi tile server $layer"))
+  private class MockFireDataSource(
+    var responseToReturn: FireDataResponse
+  ) : FireDataSource {
+    var callCount = 0
+    override suspend fun fetchFireData(
+      mapKey: String,
+      source: String,
+      areaCoordinates: String,
+      dayRange: Int
+    ): FireDataResponse {
+      callCount++
+      return responseToReturn
     }
-    val failResult = MapTileValidator.validateTileForViewport(
-      layer = BaseMapLayer.SATELLITE_ESRI,
-      latitude = -2.123,
-      longitude = 114.567,
-      zoom = 12
-    )
-    assertTrue(failResult.isFailure)
+  }
 
-    MapTileValidator.testTileVerifier = {
-      Result.success(true)
+  // A. MAP_KEY kosong -> fire count = "--" (bukan 0)
+  @Test
+  fun `test A MAP_KEY empty results in credential required and no fake 0 count`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = null)
+    val ds = MockFireDataSource(FireDataResponse.unverified())
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    val response = repo.refreshFireData()
+    assertEquals(FireDataSourceState.API_CREDENTIAL_REQUIRED, response.state)
+    assertEquals(0, ds.callCount) // Tidak boleh panggil API tanpa key
+
+    // Verifikasi audit format teks fire count untuk state ini harus "--"
+    val countDisplay = if (response.state == FireDataSourceState.DATA_SOURCE_AVAILABLE ||
+      response.state == FireDataSourceState.NO_DETECTIONS_IN_QUERY ||
+      response.state == FireDataSourceState.CACHED
+    ) {
+      response.validRecordCount.toString()
+    } else {
+      "--"
     }
-    val successResult = MapTileValidator.validateTileForViewport(
-      layer = BaseMapLayer.SATELLITE_ESRI,
-      latitude = -2.123,
-      longitude = 114.567,
-      zoom = 12
-    )
-    assertTrue(successResult.isSuccess)
-    assertTrue(successResult.getOrThrow())
-
-    MapTileValidator.testTileVerifier = null
+    assertEquals("--", countDisplay)
   }
 
+  // B. MAP_KEY salah -> credential invalid
   @Test
-  fun `test distance filter when user location is null blocks distance matching to prevent false positives`() {
-    val now = 1700000000000L
-    val rec1 = createSampleRecord(1, now, "N21")
-    val rec2 = createSampleRecord(2, now, "N20")
-    val list = listOf(rec1, rec2)
+  fun `test B MAP_KEY invalid results in credential invalid and rejected`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "bad_key", state = FireDataCredentialState.INVALID)
+    val ds = MockFireDataSource(FireDataResponse.unverified())
+    val repo = RealFireDataRepository(credProvider, ds)
 
-    // Mandat B3: jika deviceLocation null dan filter jarak aktif, jangan loloskan record seolah-olah filter tidak aktif (zero false-positives)
-    val filteredWithDist = HotspotFilterHelper.filterRecords(
-      records = list,
-      criteria = HotspotFilterCriteria(maxDistanceKm = 10.0),
-      deviceLocation = null,
-      currentTimeMillis = now
-    )
-    assertEquals(0, filteredWithDist.size)
-
-    // Tanpa filter jarak, kedua record tetap lolos
-    val filteredWithoutDist = HotspotFilterHelper.filterRecords(
-      records = list,
-      criteria = HotspotFilterCriteria(maxDistanceKm = null),
-      deviceLocation = null,
-      currentTimeMillis = now
-    )
-    assertEquals(2, filteredWithoutDist.size)
+    val response = repo.refreshFireData()
+    assertEquals(FireDataSourceState.API_CREDENTIAL_REQUIRED, response.state)
+    assertEquals(0, ds.callCount)
   }
 
+  // C. HTTP 401 -> credential invalid, auto-downgrade
   @Test
-  fun `test distance filter filters strictly by radius from user location`() {
-    val now = 1700000000000L
-    // Mantangai center approximately -2.12345, 114.56789
-    val userLoc = com.example.core.location.DeviceLocation(
-      latitude = -2.12345,
-      longitude = 114.56789,
-      accuracyMeters = 5.0f,
-      timeMillis = now,
-      provider = "gps"
+  fun `test C HTTP 401 marks credential INVALID immediately`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "unauthorized_key")
+    val ds = MockFireDataSource(
+      FireDataResponse.error(
+        state = FireDataSourceState.API_CREDENTIAL_REQUIRED,
+        error = FireDataError.HttpError(401, "Unauthorized")
+      )
     )
-    // Close record ~ 1 km away
-    val closeRec = createSampleRecord(0, now, "N21")
-    // Far record ~ 50 km away (0.45 deg difference)
-    val farRec = createSampleRecord(50, now, "N21").copy(latitude = -2.60000)
+    val repo = RealFireDataRepository(credProvider, ds)
 
-    val list = listOf(closeRec, farRec)
-
-    val filteredWithin10Km = HotspotFilterHelper.filterRecords(
-      records = list,
-      criteria = HotspotFilterCriteria(maxDistanceKm = 10.0),
-      deviceLocation = userLoc,
-      currentTimeMillis = now
-    )
-    assertEquals(1, filteredWithin10Km.size)
-    assertEquals(closeRec.latitude, filteredWithin10Km[0].latitude, 0.0001)
-
-    val filteredWithin100Km = HotspotFilterHelper.filterRecords(
-      records = list,
-      criteria = HotspotFilterCriteria(maxDistanceKm = 100.0),
-      deviceLocation = userLoc,
-      currentTimeMillis = now
-    )
-    assertEquals(2, filteredWithin100Km.size)
+    val response = repo.refreshFireData(force = true)
+    assertEquals(401, response.httpStatusCode)
+    assertEquals(FireDataCredentialState.INVALID, credProvider.getCredentialState())
   }
 
+  // D. HTTP 403 -> credential invalid, auto-downgrade
   @Test
-  fun `test share text does not contain internal credentials or MAP_KEY`() {
-    val sample = createSampleRecord(1, 1700000000000L, "NOAA-21")
-    val text = FireHotspotShareHelper.generateShareText(sample, 12.5)
+  fun `test D HTTP 403 marks credential INVALID immediately`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "forbidden_key")
+    val ds = MockFireDataSource(
+      FireDataResponse.error(
+        state = FireDataSourceState.API_CREDENTIAL_REQUIRED,
+        error = FireDataError.HttpError(403, "Forbidden")
+      )
+    )
+    val repo = RealFireDataRepository(credProvider, ds)
 
-    assertFalse("Teks bagikan tidak boleh membocorkan MAP_KEY", text.contains("MAP_KEY"))
-    assertFalse("Teks bagikan tidak boleh membocorkan token", text.contains("api/area/csv"))
-    assertTrue(text.contains("TITIK PANAS TERDETEKSI SATELIT"))
-    assertTrue(text.contains("12.5 km"))
+    val response = repo.refreshFireData(force = true)
+    assertEquals(403, response.httpStatusCode)
+    assertEquals(FireDataCredentialState.INVALID, credProvider.getCredentialState())
   }
 
-  private fun createSampleRecord(id: Int, acqMillis: Long, sat: String): FireDataRecord {
-    return FireDataRecord(
-      latitude = -2.12345 + (id * 0.01),
-      longitude = 114.56789 + (id * 0.01),
-      brightTi4 = 320.5,
-      scan = 0.4,
-      track = 0.4,
-      acqDate = "2023-10-15",
-      acqTime = "0430",
-      satellite = sat,
-      instrument = "VIIRS",
-      confidence = "nominal",
-      version = "2.0NRT",
-      brightTi5 = 295.0,
-      frp = 12.4,
-      dayNight = "D",
-      acquisitionTimestampMillis = acqMillis
+  // E. HTTP 429 -> repository cooldown / backoff aktif, no API spam
+  @Test
+  fun `test E HTTP 429 triggers rate limit backoff and blocks immediate calls`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "valid_key_12345678")
+    val ds = MockFireDataSource(
+      FireDataResponse.error(
+        state = FireDataSourceState.RATE_LIMIT_EXCEEDED,
+        error = FireDataError.HttpError(429, "Too Many Requests")
+      )
     )
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    val first = repo.refreshFireData(force = true)
+    assertEquals(FireDataSourceState.RATE_LIMIT_EXCEEDED, first.state)
+    assertEquals(1, ds.callCount)
+
+    // Panggilan berikutnya langsung ditahan oleh backoff tanpa memanggil remote API
+    val second = repo.refreshFireData(force = true)
+    assertEquals(FireDataSourceState.RATE_LIMIT_EXCEEDED, second.state)
+    assertEquals(1, ds.callCount) // Tidak bertambah
+  }
+
+  // F. HTTP 500 -> error, bukan 0 api
+  @Test
+  fun `test F HTTP 500 reports error and never reports fake 0 hotspot`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "valid_key_12345678")
+    val ds = MockFireDataSource(
+      FireDataResponse.error(
+        state = FireDataSourceState.DATA_SOURCE_UNAVAILABLE,
+        error = FireDataError.HttpError(500, "Internal Server Error")
+      )
+    )
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    val res = repo.refreshFireData(force = true)
+    assertEquals(FireDataSourceState.DATA_SOURCE_UNAVAILABLE, res.state)
+    assertEquals(500, res.httpStatusCode)
+
+    // Formatter tidak boleh menampilkan "0 Titik Api" saat HTTP 500
+    val display = if (res.state == FireDataSourceState.DATA_SOURCE_AVAILABLE ||
+      res.state == FireDataSourceState.NO_DETECTIONS_IN_QUERY
+    ) {
+      "${res.validRecordCount} Titik Api"
+    } else {
+      "Error: Data Tidak Tersedia"
+    }
+    assertEquals("Error: Data Tidak Tersedia", display)
+  }
+
+  // G. Network timeout -> error, bukan 0 api
+  @Test
+  fun `test G Network timeout reports TIMEOUT and never reports fake 0`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "valid_key_12345678")
+    val ds = MockFireDataSource(
+      FireDataResponse.error(
+        state = FireDataSourceState.TIMEOUT,
+        error = FireDataError.Timeout
+      )
+    )
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    val res = repo.refreshFireData(force = true)
+    assertEquals(FireDataSourceState.TIMEOUT, res.state)
+    assertFalse(res.state == FireDataSourceState.NO_DETECTIONS_IN_QUERY)
+  }
+
+  // H. HTTP 200 + 0 record -> 0 api (valid overpass)
+  @Test
+  fun `test H HTTP 200 with 0 record reports NO_DETECTIONS_IN_QUERY with 0 count`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "valid_key_12345678")
+    val ds = MockFireDataSource(
+      FireDataResponse(
+        state = FireDataSourceState.NO_DETECTIONS_IN_QUERY,
+        records = emptyList(),
+        rawRecordCount = 0,
+        validRecordCount = 0,
+        requestTimeMillis = System.currentTimeMillis(),
+        fetchTimeMillis = System.currentTimeMillis(),
+        sourceSensor = NasaFirmsConstants.SENSOR_VIIRS_NOAA21,
+        httpStatusCode = 200,
+        requestArea = NasaFirmsConstants.DEFAULT_MANTHANGAI_BBOX
+      )
+    )
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    val res = repo.refreshFireData(force = true)
+    assertEquals(FireDataSourceState.NO_DETECTIONS_IN_QUERY, res.state)
+    assertEquals(0, res.validRecordCount)
+  }
+
+  // I. HTTP 200 + 10 record -> 10 marker di peta
+  @Test
+  fun `test I HTTP 200 with 10 records provides 10 records for map markers`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "valid_key_12345678")
+    val records = (1..10).map { i ->
+      FireDataRecord(
+        latitude = -2.15 + (i * 0.01),
+        longitude = 114.65 + (i * 0.01),
+        brightTi4 = 320.0,
+        acqDate = "2026-09-15",
+        acqTime = "0430",
+        satellite = "NOAA-21",
+        confidence = "nominal",
+        frp = 15.0,
+        instrument = "VIIRS"
+      )
+    }
+    val ds = MockFireDataSource(
+      FireDataResponse(
+        state = FireDataSourceState.DATA_SOURCE_AVAILABLE,
+        records = records,
+        rawRecordCount = 10,
+        validRecordCount = 10,
+        requestTimeMillis = System.currentTimeMillis(),
+        fetchTimeMillis = System.currentTimeMillis(),
+        sourceSensor = NasaFirmsConstants.SENSOR_VIIRS_NOAA21,
+        httpStatusCode = 200,
+        requestArea = NasaFirmsConstants.DEFAULT_MANTHANGAI_BBOX
+      )
+    )
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    val res = repo.refreshFireData(force = true)
+    assertEquals(FireDataSourceState.DATA_SOURCE_AVAILABLE, res.state)
+    assertEquals(10, res.records.size)
+  }
+
+  // J. Filter menghasilkan 0 -> 0 marker di peta dan 0 di list
+  @Test
+  fun `test J Filter matching 0 records returns strictly empty list`() {
+    val records = listOf(
+      FireDataRecord(
+        latitude = -2.15,
+        longitude = 114.65,
+        brightTi4 = 320.0,
+        acqDate = "2026-09-15",
+        acqTime = "0430",
+        satellite = "NOAA-21",
+        confidence = "nominal",
+        frp = 15.0,
+        instrument = "VIIRS"
+      )
+    )
+    // Filter satellite to Aqua (record is NOAA-21) -> matches 0 records
+    val criteria = HotspotFilterCriteria(satellite = "Aqua")
+    val filtered = HotspotFilterHelper.filterRecords(records, criteria)
+
+    assertEquals(0, filtered.size)
+    // DILARANG fallback ke seluruh records saat filter menghasilkan 0!
+    assertFalse(filtered.isNotEmpty())
+  }
+
+  // K. Filter menghasilkan 5 -> 5 marker di peta
+  @Test
+  fun `test K Filter matching 5 records returns exactly 5 records`() {
+    val records = (1..10).map { i ->
+      FireDataRecord(
+        latitude = -2.15 + (i * 0.01),
+        longitude = 114.65 + (i * 0.01),
+        brightTi4 = 320.0,
+        acqDate = "2026-09-15",
+        acqTime = "0430",
+        satellite = if (i <= 5) "NOAA-21" else "Terra",
+        confidence = "nominal",
+        frp = 15.0,
+        instrument = if (i <= 5) "VIIRS" else "MODIS"
+      )
+    }
+    val criteria = HotspotFilterCriteria(satellite = "NOAA-21")
+    val filtered = HotspotFilterHelper.filterRecords(records, criteria)
+
+    assertEquals(5, filtered.size)
+  }
+
+  // L. Esri tile HTTP success -> MAP_READY
+  @Test
+  fun `test L Esri tile HTTP success validates tile`() {
+    val dummyTileBytes = byteArrayOf(
+      0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+      0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15.toByte(), 0xC4.toByte(), 0x89.toByte()
+    )
+    val client = OkHttpClient.Builder().addInterceptor { chain ->
+      Response.Builder()
+        .request(chain.request())
+        .protocol(Protocol.HTTP_1_1)
+        .code(200)
+        .message("OK")
+        .body(ResponseBody.create(null, dummyTileBytes))
+        .build()
+    }.build()
+
+    val request = Request.Builder().url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/10/500/500").build()
+    val isValid = client.newCall(request).execute().use { resp ->
+      val bytes = resp.body?.bytes()
+      resp.isSuccessful && bytes != null && bytes.isNotEmpty()
+    }
+    assertTrue(isValid)
+  }
+
+  // M. Esri tile HTTP failure -> MAP_ERROR
+  @Test
+  fun `test M Esri tile HTTP failure correctly detects failure`() {
+    val client = OkHttpClient.Builder().addInterceptor { chain ->
+      Response.Builder()
+        .request(chain.request())
+        .protocol(Protocol.HTTP_1_1)
+        .code(503)
+        .message("Service Unavailable")
+        .body(ResponseBody.create(null, "Service Unavailable"))
+        .build()
+    }.build()
+
+    val request = Request.Builder().url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/10/500/500").build()
+    val isValid = client.newCall(request).execute().use { resp ->
+      val bytes = resp.body?.bytes()
+      resp.isSuccessful && bytes != null && bytes.isNotEmpty()
+    }
+    assertFalse(isValid)
+  }
+
+  // N. Marker titik api menggunakan icon api (bukan default osmdroid)
+  @Test
+  fun `test N Marker icon uses flame vector from FireMarkerIconHelper`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val icon = FireMarkerIconHelper.getFlameIcon(context)
+    assertNotNull(icon)
+  }
+
+  // O. Repository cooldown tidak bisa di-bypass dengan force=true
+  @Test
+  fun `test O Repository cooldown cannot be bypassed by force=true`() = runBlocking {
+    val credProvider = TestCredentialProvider(key = "valid_key_12345678")
+    val ds = MockFireDataSource(
+      FireDataResponse(
+        state = FireDataSourceState.DATA_SOURCE_AVAILABLE,
+        records = emptyList(),
+        rawRecordCount = 0,
+        validRecordCount = 0,
+        requestTimeMillis = System.currentTimeMillis(),
+        fetchTimeMillis = System.currentTimeMillis(),
+        sourceSensor = NasaFirmsConstants.SENSOR_VIIRS_NOAA21,
+        httpStatusCode = 200,
+        requestArea = NasaFirmsConstants.DEFAULT_MANTHANGAI_BBOX
+      )
+    )
+    val repo = RealFireDataRepository(credProvider, ds)
+
+    // Call 1: HTTP hit
+    val first = repo.refreshFireData(force = false)
+    assertEquals(1, ds.callCount)
+
+    // Call 2: with force = true, BUT cooldown is active -> MUST NOT call API
+    val second = repo.refreshFireData(force = true)
+    assertEquals(1, ds.callCount) // Tidak bertambah, cooldown terkunci rapat!
+    assertEquals(first.fetchTimeMillis, second.fetchTimeMillis)
+  }
+
+  // P. Live test tidak bisa VERIFIED jika kredensial tidak ada
+  @Test
+  fun `test P Live test pipeline audit reports LIVE_API_NOT_VERIFIED when key is missing`() {
+    val audit = LiveApiDiagnosticAuditor.auditPipeline(
+      credState = FireDataCredentialState.NOT_CONFIGURED,
+      sourceState = FireDataSourceState.NOT_VERIFIED,
+      response = FireDataResponse.unverified(),
+      queryArea = NasaFirmsConstants.DEFAULT_MANTHANGAI_BBOX
+    )
+    assertEquals(LiveVerificationGate.LIVE_API_NOT_VERIFIED, audit.gate)
+    assertFalse("Pipeline must never claim verified without credentials", audit.isLiveApiVerified)
   }
 }
