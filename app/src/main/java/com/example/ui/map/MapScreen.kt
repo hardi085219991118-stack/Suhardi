@@ -93,9 +93,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Screen Peta Geografis (FIRE-005 — Map Foundation & FIRE-008 — Verified Fire Markers)
+ * Screen Peta Geografis (FIRE-005 — Map Foundation & FIRE-008 — Verified Satellite Hotspot Markers)
  * Menampilkan peta nyata berbasis osmdroid dan posisi riil pengguna dari FIRE-004.
- * Menampilkan titik api terverifikasi dari NASA FIRMS (FIRE-007 / FIRE-008) HANYA jika data valid.
+ * Menampilkan deteksi titik panas dari NASA FIRMS (FIRE-007 / FIRE-008) HANYA jika data otentik valid.
  *
  * MANDAT ZERO-DUMMY:
  * - Tidak ada marker api jika data belum diverifikasi atau request gagal.
@@ -123,9 +123,15 @@ fun MapScreen(
   var mapErrorMessage by remember { mutableStateOf<String?>(null) }
   var mapViewRef by remember { mutableStateOf<MapView?>(null) }
   var hasInitialCentered by remember { mutableStateOf(false) }
-  var selectedBaseMapLayer by remember { mutableStateOf(BaseMapLayer.OPEN_STREET_MAP) }
+  var selectedBaseMapLayer by remember { mutableStateOf(BaseMapLayer.SATELLITE_ESRI) }
   var showLayerMenu by remember { mutableStateOf(false) }
   var selectedFireRecord by remember { mutableStateOf<FireDataRecord?>(null) }
+
+  // Marker performance cache (BUG 7)
+  var lastUserLocationFingerprint by remember { mutableStateOf<Int?>(null) }
+  var lastFireDataFingerprint by remember { mutableStateOf<Int?>(null) }
+  var cachedUserMarker by remember { mutableStateOf<Marker?>(null) }
+  val cachedFireMarkers = remember { mutableListOf<Marker>() }
 
   // Validasi koordinat sesuai Section 14
   val validationResult = remember(deviceLocation) {
@@ -379,80 +385,114 @@ fun MapScreen(
           },
           update = { mv ->
             if (mv is MapView) {
-              // Bersihkan seluruh overlay sebelumnya
-              mv.overlays.clear()
-
-              // 1. Tambahkan marker posisi pengguna jika lokasi tersedia & valid
-              if (locationStatus == LocationStatus.LOCATION_AVAILABLE &&
+              // 1. User Location Marker Fingerprint & Update
+              val currentUserFingerprint = if (locationStatus == LocationStatus.LOCATION_AVAILABLE &&
                 deviceLocation != null &&
                 validationResult.isValid
               ) {
-                val userMarker = Marker(mv).apply {
-                  position = GeoPoint(deviceLocation.latitude, deviceLocation.longitude)
-                  title = when {
-                    deviceLocation.isMock -> "MOCK LOCATION (UNVERIFIED)"
-                    deviceLocation.runtimeEnvironment == RuntimeEnvironment.EMULATOR ||
-                    deviceLocation.runtimeEnvironment == RuntimeEnvironment.VIRTUAL_DEVICE ||
-                    deviceLocation.runtimeEnvironment == RuntimeEnvironment.CLOUD_CONTAINER -> "VIRTUAL TEST LOCATION"
-                    deviceLocation.isFromCache -> "CACHED LOCATION"
-                    deviceLocation.verificationLevel == LocationVerificationLevel.REAL_DEVICE_VERIFIED -> "REAL DEVICE LOCATION"
-                    else -> "LOKASI PERANGKAT (${deviceLocation.locationSource})"
-                  }
-                  val shortTime = if (deviceLocation.timeMillis > 0) {
-                    SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(deviceLocation.timeMillis))
-                  } else "N/A"
-                  snippet = String.format(
-                    Locale.US,
-                    "Lat: %.6f°, Lon: %.6f°\nSumber: %s | Waktu: %s%s",
-                    deviceLocation.latitude,
-                    deviceLocation.longitude,
-                    deviceLocation.locationSource,
-                    shortTime,
-                    if (deviceLocation.accuracyMeters != null) "\nAkurasi: ±%.1f m".format(deviceLocation.accuracyMeters) else ""
-                  )
-                  setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                }
-                mv.overlays.add(userMarker)
+                java.util.Objects.hash(
+                  deviceLocation.latitude,
+                  deviceLocation.longitude,
+                  deviceLocation.accuracyMeters,
+                  deviceLocation.verificationLevel,
+                  deviceLocation.timeMillis
+                )
+              } else {
+                null
               }
 
-              // 2. Verified Fire Markers (FIRE-008)
-              // Hanya dirender jika data satelit nyata berhasil diverifikasi (DATA_SOURCE_AVAILABLE / CACHED)
+              if (currentUserFingerprint != lastUserLocationFingerprint) {
+                cachedUserMarker = if (currentUserFingerprint != null && deviceLocation != null) {
+                  Marker(mv).apply {
+                    position = GeoPoint(deviceLocation.latitude, deviceLocation.longitude)
+                    title = when {
+                      deviceLocation.isMock -> "MOCK LOCATION (UNVERIFIED)"
+                      deviceLocation.runtimeEnvironment == RuntimeEnvironment.EMULATOR ||
+                      deviceLocation.runtimeEnvironment == RuntimeEnvironment.VIRTUAL_DEVICE ||
+                      deviceLocation.runtimeEnvironment == RuntimeEnvironment.CLOUD_CONTAINER -> "VIRTUAL TEST LOCATION"
+                      deviceLocation.isFromCache -> "CACHED LOCATION"
+                      deviceLocation.verificationLevel == LocationVerificationLevel.REAL_DEVICE_VERIFIED -> "REAL DEVICE LOCATION"
+                      else -> "LOKASI PERANGKAT (${deviceLocation.locationSource})"
+                    }
+                    val shortTime = if (deviceLocation.timeMillis > 0) {
+                      SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(deviceLocation.timeMillis))
+                    } else "N/A"
+                    snippet = String.format(
+                      Locale.US,
+                      "Lat: %.6f°, Lon: %.6f°\nSumber: %s | Waktu: %s%s",
+                      deviceLocation.latitude,
+                      deviceLocation.longitude,
+                      deviceLocation.locationSource,
+                      shortTime,
+                      if (deviceLocation.accuracyMeters != null) "\nAkurasi: ±%.1f m".format(deviceLocation.accuracyMeters) else ""
+                    )
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                  }
+                } else {
+                  null
+                }
+                lastUserLocationFingerprint = currentUserFingerprint
+              }
+
+              // 2. Verified Satellite Hotspot Markers Fingerprint & Update (FIRE-008, BUG 7)
               val isLiveOrCached = fireDataSourceState == FireDataSourceState.DATA_SOURCE_AVAILABLE ||
                 (fireDataSourceState == FireDataSourceState.CACHED && fireRecords.isNotEmpty())
 
-              if (isLiveOrCached) {
-                val validFires = fireRecords.filter { fire ->
-                  CoordinateValidator.isValid(fire.latitude, fire.longitude) &&
-                    !(fire.latitude == 0.0 && fire.longitude == 0.0)
-                }
-
-                validFires.forEach { fire ->
-                  val fireMarker = Marker(mv).apply {
-                    position = GeoPoint(fire.latitude, fire.longitude)
-                    title = "TITIK API TERDETEKSI"
-                    val acqDateStr = fire.acqDate.ifBlank { "N/A" }
-                    val acqTimeStr = if (fire.acqTime.isNotBlank()) "${fire.acqTime} UTC" else "N/A"
-                    val satStr = fire.satellite.ifBlank { "N/A" }
-                    val instStr = fire.instrument.ifBlank { "N/A" }
-                    val confStr = fire.confidence ?: "N/A"
-                    val frpStr = if (fire.frp != null) "${fire.frp} MW" else "N/A"
-                    val ageStr = FireDataAgeCalculator.formatAgeDetail(fire.acquisitionTimestampMillis)
-
-                    snippet = "Satelit: $satStr ($instStr)\nWaktu: $acqDateStr $acqTimeStr\nConfidence: $confStr | FRP: $frpStr\nUsia: $ageStr"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    setOnMarkerClickListener { m, _ ->
-                      m.showInfoWindow()
-                      selectedFireRecord = fire
-                      true
-                    }
-                  }
-                  mv.overlays.add(fireMarker)
-                }
-
-                if (validFires.isNotEmpty()) {
-                  AppLogger.recordEvent("LIVE_RECORDS_RENDERED: count=${validFires.size}")
-                }
+              val currentFireFingerprint = if (isLiveOrCached) {
+                java.util.Objects.hash(
+                  fireDataSourceState,
+                  fireRecords.size,
+                  fireRecords.firstOrNull()?.latitude,
+                  fireRecords.firstOrNull()?.longitude,
+                  fireRecords.lastOrNull()?.latitude,
+                  fireRecords.lastOrNull()?.longitude
+                )
+              } else {
+                0
               }
+
+              if (currentFireFingerprint != lastFireDataFingerprint) {
+                cachedFireMarkers.clear()
+                if (isLiveOrCached) {
+                  val validFires = fireRecords.filter { fire ->
+                    CoordinateValidator.isValid(fire.latitude, fire.longitude) &&
+                      !(fire.latitude == 0.0 && fire.longitude == 0.0)
+                  }
+
+                  validFires.forEach { fire ->
+                    val fireMarker = Marker(mv).apply {
+                      position = GeoPoint(fire.latitude, fire.longitude)
+                      title = "DETEKSI TITIK PANAS NASA FIRMS"
+                      val acqDateStr = fire.acqDate.ifBlank { "N/A" }
+                      val acqTimeStr = if (fire.acqTime.isNotBlank()) "${fire.acqTime} UTC" else "N/A"
+                      val satStr = fire.satellite.ifBlank { "N/A" }
+                      val instStr = fire.instrument.ifBlank { "N/A" }
+                      val confStr = fire.confidence ?: "N/A"
+                      val frpStr = if (fire.frp != null) "${fire.frp} MW" else "N/A"
+                      val ageStr = FireDataAgeCalculator.formatAgeDetail(fire.acquisitionTimestampMillis)
+
+                      snippet = "Satelit: $satStr ($instStr)\nWaktu: $acqDateStr $acqTimeStr\nConfidence: $confStr | FRP: $frpStr\nUsia: $ageStr"
+                      setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                      setOnMarkerClickListener { m, _ ->
+                        m.showInfoWindow()
+                        selectedFireRecord = fire
+                        true
+                      }
+                    }
+                    cachedFireMarkers.add(fireMarker)
+                  }
+
+                  if (validFires.isNotEmpty()) {
+                    AppLogger.recordEvent("HOTSPOT_MARKERS_RENDERED: count=${validFires.size}")
+                  }
+                }
+                lastFireDataFingerprint = currentFireFingerprint
+              }
+
+              // Pasang overlay ke MapView secara efisien
+              mv.overlays.clear()
+              cachedUserMarker?.let { mv.overlays.add(it) }
+              mv.overlays.addAll(cachedFireMarkers)
 
               mv.invalidate()
             }
@@ -680,13 +720,13 @@ fun UserLocationInfoCard(
             )
             val badgeFireText = when {
               fireDataSourceState == FireDataSourceState.DATA_SOURCE_AVAILABLE && fireRecords.isNotEmpty() ->
-                "${fireRecords.size} TITIK API TERVERIFIKASI (NASA FIRMS)"
+                "${fireRecords.size} DETEKSI TITIK PANAS NASA FIRMS"
               fireDataSourceState == FireDataSourceState.NO_DETECTIONS_IN_QUERY ->
-                "0 TITIK API (QUERY RESMI NASA)"
+                "0 DETEKSI TITIK PANAS (QUERY RESMI NASA)"
               fireDataSourceState == FireDataSourceState.CACHED && fireRecords.isNotEmpty() ->
-                "${fireRecords.size} TITIK API (CACHE TERSIMPAN)"
+                "${fireRecords.size} TITIK PANAS (SESSION CACHE)"
               else ->
-                "ZERO FIRE MARKERS — DATA BELUM TERVERIFIKASI"
+                "ZERO-DUMMY: DATA TITIK PANAS BELUM TERHUBUNG"
             }
             val badgeFireColor = when {
               fireDataSourceState == FireDataSourceState.DATA_SOURCE_AVAILABLE && fireRecords.isNotEmpty() ->

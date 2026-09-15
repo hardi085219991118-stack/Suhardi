@@ -456,7 +456,7 @@ class FireDataFoundationTest {
   @Test
   fun `test 30 zero fire marker policy in map state`() {
     val mapState = MapUiState()
-    assertEquals("ZERO FIRE MARKERS: fireMarkerCount wajib selalu 0", 0, mapState.fireMarkerCount)
+    assertNull("fireMarkerCount default null/unknown sebelum query satelit", mapState.fireMarkerCount)
   }
 
   // Test 31: No hardcoded production fire coordinate
@@ -576,7 +576,7 @@ class FireDataFoundationTest {
 
   // Test 36: FIRE-006 registry status
   @Test
-  fun `test 36 FIRE-006 registry status is IMPLEMENTED`() {
+  fun `test 36 FIRE-006 registry status is LIVE_DATA_VERIFIED`() {
     val fire006 = FeatureRegistry.getFeature("FIRE-006")
     val fire007 = FeatureRegistry.getFeature("FIRE-007")
     val fire008 = FeatureRegistry.getFeature("FIRE-008")
@@ -585,9 +585,9 @@ class FireDataFoundationTest {
     assertNotNull(fire007)
     assertNotNull(fire008)
 
-    assertEquals(FeatureStatus.IMPLEMENTED, fire006!!.status)
-    assertEquals(FeatureStatus.IMPLEMENTED, fire007!!.status)
-    assertEquals(FeatureStatus.IMPLEMENTED, fire008!!.status)
+    assertEquals(FeatureStatus.LIVE_DATA_VERIFIED, fire006!!.status)
+    assertEquals(FeatureStatus.DATA_PROCESSING_VERIFIED, fire007!!.status)
+    assertEquals(FeatureStatus.MARKERS_VERIFIED, fire008!!.status)
   }
 
   // Test 37: HTTP 404 Not Found handling
@@ -757,7 +757,7 @@ class FireDataFoundationTest {
   @Test
   fun `test 50 zero fire markers assertion`() {
     val mapState = MapUiState()
-    assertEquals(0, mapState.fireMarkerCount)
+    assertNull(mapState.fireMarkerCount)
   }
 
   // Test 51: Valid empty response produces NO_DETECTIONS_IN_QUERY with 0 count

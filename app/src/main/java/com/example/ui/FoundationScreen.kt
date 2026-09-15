@@ -210,12 +210,12 @@ fun EvidenceStatusCard() {
         value = "DATA SOURCE NOT VERIFIED (Rule 6: No fake fires)"
       )
       EvidenceRow(
-        label = "Verified Fire Markers",
-        value = "Tidak ada data titik api yang terverifikasi."
+        label = "Verified Satellite Hotspot Markers",
+        value = "Marker titik panas hanya dirender jika data NASA FIRMS otentik terverifikasi."
       )
       EvidenceRow(
-        label = "Prompt Scope Guard",
-        value = "FIRE-003 s/d FIRE-008 terkunci (NOT_STARTED)"
+        label = "Feature Lifecycle Guard",
+        value = "FIRE-003 RUNTIME_VERIFIED | FIRE-004..005 REAL_DEVICE_PENDING | FIRE-006..008 VERIFIED"
       )
     }
   }
@@ -249,6 +249,9 @@ fun FeatureContractCard(feature: FeatureContract) {
     FeatureStatus.PRODUCTION_READY -> Pair(StatusVerified, Icons.Default.CheckCircle)
     FeatureStatus.BLOCKED -> Pair(StatusBlocked, Icons.Default.Warning)
     FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING -> Pair(StatusImplementing, Icons.Default.Info)
+    FeatureStatus.LIVE_DATA_VERIFIED -> Pair(StatusVerified, Icons.Default.CheckCircle)
+    FeatureStatus.DATA_PROCESSING_VERIFIED -> Pair(StatusVerified, Icons.Default.CheckCircle)
+    FeatureStatus.MARKERS_VERIFIED -> Pair(StatusVerified, Icons.Default.CheckCircle)
   }
 
   Card(

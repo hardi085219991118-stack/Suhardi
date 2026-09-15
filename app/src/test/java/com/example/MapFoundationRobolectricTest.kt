@@ -56,17 +56,17 @@ class MapFoundationRobolectricTest {
     assertEquals("NOT_REQUIRED", MapProviderInfo.CREDENTIAL_STATUS)
     assertTrue(MapProviderInfo.PROVIDER_NAME.contains("osmdroid"))
     assertTrue(MapProviderInfo.TILE_SOURCE.contains("OpenStreetMap"))
-    assertTrue(MapProviderInfo.ZERO_FIRE_MARKERS_POLICY.contains("ZERO FIRE MARKERS"))
+    assertTrue(MapProviderInfo.ZERO_FIRE_MARKERS_POLICY.contains("ZERO-DUMMY", ignoreCase = true))
   }
 
   @Test
   fun `test zero fire markers rule in map state`() {
     val mapUiState = MapUiState()
-    assertEquals(
-      "ZERO FIRE MARKERS: fireMarkerCount wajib selalu 0 karena sumber data satelit belum ada",
-      0,
+    assertNull(
+      "ZERO FIRE MARKERS: fireMarkerCount default null sebelum terhubung sumber satelit",
       mapUiState.fireMarkerCount
     )
+    assertEquals("--", mapUiState.fireMarkerDisplay)
   }
 
   @Test
@@ -130,16 +130,16 @@ class MapFoundationRobolectricTest {
       fire005?.status
     )
 
-    // Section 2: FIRE-006, FIRE-007, and FIRE-008 IMPLEMENTED
+    // Section 2: FIRE-006, FIRE-007, and FIRE-008 Verified
     val fire006 = FeatureRegistry.getFeature("FIRE-006")
     assertNotNull("FIRE-006 must exist in registry", fire006)
-    assertEquals("FIRE-006 must be IMPLEMENTED", FeatureStatus.IMPLEMENTED, fire006?.status)
+    assertEquals("FIRE-006 must be LIVE_DATA_VERIFIED", FeatureStatus.LIVE_DATA_VERIFIED, fire006?.status)
 
     val fire007 = FeatureRegistry.getFeature("FIRE-007")
-    assertEquals("FIRE-007 is IMPLEMENTED", FeatureStatus.IMPLEMENTED, fire007?.status)
+    assertEquals("FIRE-007 is DATA_PROCESSING_VERIFIED", FeatureStatus.DATA_PROCESSING_VERIFIED, fire007?.status)
 
     val fire008 = FeatureRegistry.getFeature("FIRE-008")
-    assertEquals("FIRE-008 is IMPLEMENTED", FeatureStatus.IMPLEMENTED, fire008?.status)
+    assertEquals("FIRE-008 is MARKERS_VERIFIED", FeatureStatus.MARKERS_VERIFIED, fire008?.status)
   }
 
   @Test
@@ -280,7 +280,7 @@ class MapFoundationRobolectricTest {
     assertNotNull(mapUiState.deviceLocation)
     assertEquals(-2.585765, mapUiState.deviceLocation?.latitude ?: 0.0, 0.000001)
     assertEquals(114.441215, mapUiState.deviceLocation?.longitude ?: 0.0, 0.000001)
-    assertEquals(0, mapUiState.fireMarkerCount)
+    assertNull(mapUiState.fireMarkerCount)
   }
 
   @Test
@@ -290,7 +290,7 @@ class MapFoundationRobolectricTest {
       locationStatus = LocationStatus.LOCATION_PERMISSION_REQUIRED
     )
     assertNull("Map must not synthesize or fallback to fake coordinates", mapUiState.deviceLocation)
-    assertEquals(0, mapUiState.fireMarkerCount)
+    assertNull(mapUiState.fireMarkerCount)
   }
 
   @Test

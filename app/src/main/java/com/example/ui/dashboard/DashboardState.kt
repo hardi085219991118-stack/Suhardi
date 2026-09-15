@@ -60,6 +60,7 @@ data class DashboardState(
 
   val isRefreshSatelliteEnabled: Boolean = true,
   val isLoadingSatellite: Boolean = false,
+  val cooldownRemainingSeconds: Long = 0L,
   val refreshSatelliteNote: String = "Tekan untuk memperbarui data satelit NASA FIRMS.",
 
   // Security Architecture & Evidence Audit (Prompt 006B Section 5, 6, 11, 13, 16)

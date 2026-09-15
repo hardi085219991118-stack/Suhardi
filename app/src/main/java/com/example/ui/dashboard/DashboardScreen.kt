@@ -1342,10 +1342,10 @@ fun NasaFirmsEvidenceCard(state: DashboardState) {
               fontSize = 10.sp,
               fontWeight = FontWeight.Bold
             ),
-            color = if (state.diagnosticCause == com.example.core.fire.LiveApiDiagnosticCause.REQUEST_NOT_STARTED) {
-              MaterialTheme.colorScheme.primary
-            } else {
-              StatusBlocked
+            color = when (state.diagnosticCause) {
+              com.example.core.fire.LiveApiDiagnosticCause.LIVE_REQUEST_SUCCESS -> StatusVerified
+              com.example.core.fire.LiveApiDiagnosticCause.REQUEST_NOT_STARTED -> MaterialTheme.colorScheme.primary
+              else -> StatusBlocked
             },
             modifier = Modifier.testTag("diagnostic_cause_text")
           )
@@ -1480,12 +1480,13 @@ fun RefreshSection(
     shape = RoundedCornerShape(12.dp)
   ) {
     Column(modifier = Modifier.padding(16.dp)) {
+      val isCooldown = state.cooldownRemainingSeconds > 0L
       OutlinedButton(
         onClick = {
           AppLogger.recordEvent("User clicked Refresh: Memperbarui data satelit NASA FIRMS")
           onRefreshSatellite()
         },
-        enabled = state.isRefreshSatelliteEnabled && !state.isLoadingSatellite,
+        enabled = state.isRefreshSatelliteEnabled && !state.isLoadingSatellite && !isCooldown,
         modifier = Modifier
           .fillMaxWidth()
           .testTag("refresh_button")
@@ -1498,6 +1499,14 @@ fun RefreshSection(
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text("MENGHUBUNGI NASA FIRMS...")
+        } else if (isCooldown) {
+          Icon(
+            imageVector = Icons.Default.Schedule,
+            contentDescription = "Cooldown Aktif",
+            modifier = Modifier.size(18.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("COOLDOWN (${state.cooldownRemainingSeconds}s)")
         } else {
           Icon(
             imageVector = Icons.Default.Refresh,
@@ -1737,14 +1746,33 @@ fun MapFoundationCard(
 
       Spacer(modifier = Modifier.height(4.dp))
 
+      val fireMarkersNotice = when {
+        state.fireDataSourceState == com.example.core.fire.FireDataSourceState.DATA_SOURCE_AVAILABLE && state.fireRecords.isNotEmpty() ->
+          "DETEKSI TITIK PANAS NASA FIRMS: ${state.fireRecords.size} MARKER (FIRE-008 AKTIF)"
+        state.fireDataSourceState == com.example.core.fire.FireDataSourceState.NO_DETECTIONS_IN_QUERY ->
+          "0 DETEKSI TITIK PANAS DALAM OVERPASS SATELIT (FIRE-008)"
+        state.fireDataSourceState == com.example.core.fire.FireDataSourceState.CACHED && state.fireRecords.isNotEmpty() ->
+          "TITIK PANAS SESSION CACHE: ${state.fireRecords.size} MARKER (FIRE-008)"
+        state.credentialState == com.example.core.fire.FireDataCredentialState.CONFIGURED ->
+          "MAP_KEY TERKONFIGURASI — TEKAN PERBARUI DATA UNTUK MARKER FIRE-008"
+        else ->
+          "DATA SATELIT BELUM DIVERIFIKASI — MARKER TITIK PANAS DITAHAN (ZERO-DUMMY)"
+      }
+      val fireMarkersNoticeColor = when {
+        state.fireDataSourceState == com.example.core.fire.FireDataSourceState.DATA_SOURCE_AVAILABLE ||
+          state.fireDataSourceState == com.example.core.fire.FireDataSourceState.NO_DETECTIONS_IN_QUERY -> StatusVerified
+        state.credentialState == com.example.core.fire.FireDataCredentialState.CONFIGURED -> MaterialTheme.colorScheme.primary
+        else -> StatusNotStarted
+      }
       Text(
-        text = "ZERO FIRE MARKERS — FIRE-006 s/d FIRE-008 NOT_STARTED",
+        text = fireMarkersNotice,
         style = MaterialTheme.typography.labelSmall.copy(
           fontFamily = FontFamily.Monospace,
           fontSize = 10.sp,
           fontWeight = FontWeight.Bold
         ),
-        color = StatusNotStarted
+        color = fireMarkersNoticeColor,
+        modifier = Modifier.testTag("fire_markers_notice_text")
       )
 
       Spacer(modifier = Modifier.height(12.dp))

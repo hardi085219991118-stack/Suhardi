@@ -14,12 +14,15 @@ import com.example.core.location.AndroidLocationTracker
 import com.example.core.location.DeviceLocation
 import com.example.core.location.LocationStatus
 import com.example.core.location.LocationTracker
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.launch
+import com.example.core.fire.NasaFirmsConstants
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,6 +35,9 @@ class DashboardViewModel(
 
   private val _uiState = MutableStateFlow(DashboardState())
   val uiState: StateFlow<DashboardState> = _uiState.asStateFlow()
+
+  private var lastLiveRequestTimeMillis: Long = 0L
+  private var cooldownTimerJob: Job? = null
 
   private val utcDateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm 'UTC'", Locale.US).apply {
     timeZone = TimeZone.getTimeZone("UTC")
@@ -59,6 +65,11 @@ class DashboardViewModel(
       ) { response, credState, sourceState ->
         mapFireResponseToUiState(response, credState, sourceState)
       }.launchIn(viewModelScope)
+
+      // Auto Initial NASA FIRMS Fetch (Item 4)
+      if (repo.credentialState.value == FireDataCredentialState.CONFIGURED) {
+        refreshFireData(force = false)
+      }
     }
   }
 
@@ -380,14 +391,68 @@ class DashboardViewModel(
 
   fun refreshFireData(force: Boolean = false) {
     if (fireRepository == null) return
+    val now = System.currentTimeMillis()
+    val elapsed = now - lastLiveRequestTimeMillis
+    if (!force && lastLiveRequestTimeMillis > 0L && elapsed < NasaFirmsConstants.MIN_REQUEST_INTERVAL_MS) {
+      val remainingSec = ((NasaFirmsConstants.MIN_REQUEST_INTERVAL_MS - elapsed) / 1000L) + 1L
+      _uiState.value = _uiState.value.copy(
+        cooldownRemainingSeconds = remainingSec,
+        isRefreshSatelliteEnabled = false,
+        refreshSatelliteNote = "DATA BARU SAJA DIAMBIL. COOLDOWN: $remainingSec detik."
+      )
+      startCooldownCountdown(remainingSec)
+      return
+    }
+
     viewModelScope.launch {
-      _uiState.value = _uiState.value.copy(isLoadingSatellite = true)
-      fireRepository.refreshFireData(force = force)
+      _uiState.value = _uiState.value.copy(
+        isLoadingSatellite = true,
+        refreshSatelliteNote = "Menghubungkan ke NASA FIRMS..."
+      )
+      val res = fireRepository.refreshFireData(force = force)
+      if (res.state == FireDataSourceState.CONNECTING ||
+        res.state == FireDataSourceState.DATA_SOURCE_AVAILABLE ||
+        res.state == FireDataSourceState.NO_DETECTIONS_IN_QUERY ||
+        res.httpStatusCode == 200
+      ) {
+        lastLiveRequestTimeMillis = System.currentTimeMillis()
+        startCooldownCountdown(NasaFirmsConstants.MIN_REQUEST_INTERVAL_MS / 1000L)
+      } else if (res.httpStatusCode == 429) {
+        lastLiveRequestTimeMillis = System.currentTimeMillis()
+        startCooldownCountdown(NasaFirmsConstants.RATE_LIMIT_BACKOFF_BASE_MS / 1000L)
+      }
+      _uiState.value = _uiState.value.copy(isLoadingSatellite = false)
+    }
+  }
+
+  private fun startCooldownCountdown(totalSeconds: Long) {
+    cooldownTimerJob?.cancel()
+    cooldownTimerJob = viewModelScope.launch {
+      var remaining = totalSeconds
+      while (remaining > 0) {
+        _uiState.value = _uiState.value.copy(
+          cooldownRemainingSeconds = remaining,
+          isRefreshSatelliteEnabled = false,
+          refreshSatelliteNote = "DATA BARU SAJA DIAMBIL. COOLDOWN: $remaining detik."
+        )
+        delay(1000L)
+        remaining--
+      }
+      _uiState.value = _uiState.value.copy(
+        cooldownRemainingSeconds = 0L,
+        isRefreshSatelliteEnabled = true,
+        refreshSatelliteNote = "Tekan untuk memperbarui data satelit NASA FIRMS."
+      )
     }
   }
 
   fun setMapKey(key: String?): FireDataCredentialState {
-    return fireRepository?.setMapKey(key) ?: FireDataCredentialState.NOT_CONFIGURED
+    val result = fireRepository?.setMapKey(key) ?: FireDataCredentialState.NOT_CONFIGURED
+    if (result == FireDataCredentialState.CONFIGURED) {
+      lastLiveRequestTimeMillis = 0L
+      refreshFireData(force = true)
+    }
+    return result
   }
 
   fun clearMapKey() {
@@ -400,6 +465,7 @@ class DashboardViewModel(
 
   override fun onCleared() {
     super.onCleared()
+    cooldownTimerJob?.cancel()
     locationTracker.stopTracking()
   }
 

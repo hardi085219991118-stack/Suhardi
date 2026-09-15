@@ -55,7 +55,7 @@ class FireDataDiagnosticTest {
       "UNKNOWN_ERROR"
     )
 
-    assertEquals(26, LiveApiDiagnosticCause.values().size)
+    assertEquals(27, LiveApiDiagnosticCause.values().size)
     for (code in expectedCodes) {
       val found = LiveApiDiagnosticCause.values().find { it.code == code }
       assertNotNull("Diagnostic code $code must exist", found)
@@ -308,7 +308,7 @@ class FireDataDiagnosticTest {
 
     assertEquals(LiveVerificationGate.LIVE_API_VERIFIED, result.gate)
     assertTrue(result.isLiveApiVerified)
-    assertEquals(LiveApiDiagnosticCause.REQUEST_NOT_STARTED, result.cause) // No failure
+    assertEquals(LiveApiDiagnosticCause.LIVE_REQUEST_SUCCESS, result.cause)
   }
 
   // 11. Test Zero-Dummy Mandate: DashboardState Defaults

@@ -263,12 +263,19 @@ object LiveApiDiagnosticAuditor {
       // 9. Verified Condition (HTTP 200, valid records or legitimate zero detections)
       (sourceState == FireDataSourceState.DATA_SOURCE_AVAILABLE || sourceState == FireDataSourceState.NO_DETECTIONS_IN_QUERY) &&
         response.httpStatusCode == 200 && !response.isCached -> {
-        cause = LiveApiDiagnosticCause.REQUEST_NOT_STARTED // No failure
+        cause = LiveApiDiagnosticCause.LIVE_REQUEST_SUCCESS
         gate = LiveVerificationGate.LIVE_API_VERIFIED
         detail = "Respon live otentik dari NASA FIRMS (${response.sourceSensor}) berhasil diverifikasi via HTTP 200. SHA-256 terverifikasi. Deteksi: ${response.validRecordCount} titik api."
       }
 
-      // 10. Fallback unclassified error
+      // 10. Session Cache (Valid response from previous HTTP 200 verification)
+      sourceState == FireDataSourceState.CACHED -> {
+        cause = LiveApiDiagnosticCause.LIVE_REQUEST_SUCCESS
+        gate = LiveVerificationGate.LIVE_API_VERIFIED
+        detail = "Data titik api dimuat dari Session Cache (otentikasi HTTP 200). Usia cache: ${response.cacheAgeMillis / 1000} detik. Deteksi: ${response.validRecordCount} titik api."
+      }
+
+      // 11. Fallback unclassified error
       else -> {
         cause = LiveApiDiagnosticCause.UNKNOWN_ERROR
         gate = LiveVerificationGate.LIVE_API_UNKNOWN_ERROR

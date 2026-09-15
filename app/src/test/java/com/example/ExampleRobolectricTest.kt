@@ -34,12 +34,12 @@ class ExampleRobolectricTest {
     val fire001 = FeatureRegistry.getFeature("FIRE-001")
     assertNotNull(fire001)
     assertEquals("Master Development Contract", fire001?.name)
-    assertEquals(FeatureStatus.IMPLEMENTED, fire001?.status)
+    assertEquals(FeatureStatus.RUNTIME_VERIFIED, fire001?.status)
 
     val fire002 = FeatureRegistry.getFeature("FIRE-002")
     assertNotNull(fire002)
     assertEquals("Android Project Foundation", fire002?.name)
-    assertEquals(FeatureStatus.IMPLEMENTED, fire002?.status)
+    assertEquals(FeatureStatus.RUNTIME_VERIFIED, fire002?.status)
 
     // Prompt 003: FIRE-003 is RUNTIME_VERIFIED
     val fire003 = FeatureRegistry.getFeature("FIRE-003")
@@ -70,20 +70,19 @@ class ExampleRobolectricTest {
     val fire006 = FeatureRegistry.getFeature("FIRE-006")
     assertNotNull(fire006)
     assertEquals(
-      "Feature FIRE-006 must be IMPLEMENTED on Prompt 006A",
-      FeatureStatus.IMPLEMENTED,
+      "Feature FIRE-006 must be LIVE_DATA_VERIFIED",
+      FeatureStatus.LIVE_DATA_VERIFIED,
       fire006?.status
     )
 
-    listOf("FIRE-007", "FIRE-008").forEach { id ->
-      val feat = FeatureRegistry.getFeature(id)
-      assertNotNull(feat)
-      assertEquals(
-        "Feature $id must be IMPLEMENTED",
-        FeatureStatus.IMPLEMENTED,
-        feat?.status
-      )
-    }
+    val fire007 = FeatureRegistry.getFeature("FIRE-007")
+    assertNotNull(fire007)
+    assertEquals(FeatureStatus.DATA_PROCESSING_VERIFIED, fire007?.status)
+
+    val fire008 = FeatureRegistry.getFeature("FIRE-008")
+    assertNotNull(fire008)
+    assertEquals(FeatureStatus.MARKERS_VERIFIED, fire008?.status)
+    assertEquals("Verified Satellite Hotspot Markers", fire008?.name)
   }
 
   @Test

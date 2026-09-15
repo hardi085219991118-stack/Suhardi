@@ -15,8 +15,8 @@ Berkas installer Android Application Package (APK) telah di-generate secara lang
 - **Version Name:** `1.0`
 - **Target SDK:** Android 36 (VanillaIceCream / Android 15+)
 - **Min SDK:** Android 24 (Android 7.0 Nougat)
-- **Ukuran Berkas:** ~22.1 MB (23,188,694 bytes)
-- **SHA-256 Checksum:** `3cdcb9849551ed61edb6b22c9523c36655a743f1487c6690bd72c9cf17fb5077`
+- **Ukuran Berkas:** ~22.3 MB (23,365,137 bytes)
+- **SHA-256 Checksum:** `eab7d88cc3918d66ba9bd0a60cde0cf2ccaa9ee594238d30ceac11b46bde0348`
 
 ---
 

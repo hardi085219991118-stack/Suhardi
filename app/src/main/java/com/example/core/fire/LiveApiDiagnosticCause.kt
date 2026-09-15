@@ -111,7 +111,11 @@ enum class LiveApiDiagnosticCause(
   UNKNOWN_ERROR(
     code = "UNKNOWN_ERROR",
     description = "Kegagalan yang belum terklasifikasi."
+  ),
+  LIVE_REQUEST_SUCCESS(
+    code = "LIVE_REQUEST_SUCCESS",
+    description = "Permintaan live otentik ke NASA FIRMS berhasil via HTTP 200 dan respon valid terverifikasi."
   );
 
-  val isFailure: Boolean get() = this != REQUEST_NOT_STARTED
+  val isFailure: Boolean get() = this != REQUEST_NOT_STARTED && this != LIVE_REQUEST_SUCCESS
 }
