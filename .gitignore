@@ -17,3 +17,10 @@ local.properties
 .env
 test_credentials.properties
 debug.keystore
+
+# Ensure APK files are included in ZIP export
+!/app-debug.apk
+!/apk/
+!/apk/**
+!/public/HARDI-MANTANGAI-FIRE-NOW.apk
+!app/build/outputs/apk/debug/app-debug.apk
