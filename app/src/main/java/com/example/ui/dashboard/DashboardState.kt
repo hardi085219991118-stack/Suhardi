@@ -21,7 +21,7 @@ enum class DataState {
 
 data class DashboardState(
   val systemStatus: String = "APLIKASI AKTIF",
-  val systemDetail: String = "Fondasi sistem, integrasi lokasi Android runtime (FIRE-004), & Peta Geografis (FIRE-005) terpasang (Verifikasi real-device pending). Sumber data satelit belum aktif.",
+  val systemDetail: String = "Fondasi sistem, integrasi lokasi Android runtime (FIRE-004), Peta Geografis (FIRE-005), & Pipeline Data Satelit NASA FIRMS (FIRE-006..008) aktif secara dinamis.",
 
   // Map Foundation State (FIRE-005)
   val mapStatus: MapStatus = MapStatus.MAP_READY,

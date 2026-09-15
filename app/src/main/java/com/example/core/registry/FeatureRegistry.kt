@@ -5,7 +5,7 @@ import com.example.core.contract.FeatureStatus
 
 /**
  * Master Feature Registry as required by Section 26.
- * Zero-Dummy policy: FIRE-003 to FIRE-008 are strictly NOT_STARTED.
+ * Zero-Dummy policy: Evidence-based verification across all features.
  */
 object FeatureRegistry {
 
