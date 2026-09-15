@@ -311,9 +311,16 @@ fun HotspotDetailDialog(
         Button(
           onClick = {
             if (isCoordValid) {
-              HotspotNavigationHelper.openNavigation(context, record.latitude, record.longitude)
+              HotspotNavigationHelper.openNavigation(
+                context = context,
+                latitude = record.latitude,
+                longitude = record.longitude,
+                label = "Titik Panas NASA FIRMS",
+                originLat = if (isUserGpsValid) userLocation?.latitude else null,
+                originLon = if (isUserGpsValid) userLocation?.longitude else null
+              )
             } else {
-              Toast.makeText(context, "Lokasi titik panas tidak valid.", Toast.LENGTH_SHORT).show()
+              Toast.makeText(context, "Koordinat titik panas tidak valid.", Toast.LENGTH_SHORT).show()
             }
           },
           enabled = isCoordValid,
@@ -334,7 +341,7 @@ fun HotspotDetailDialog(
 
         if (!isCoordValid) {
           Text(
-            text = "Lokasi titik panas tidak valid. Navigasi dinonaktifkan.",
+            text = "Koordinat titik panas tidak valid. Navigasi dinonaktifkan.",
             style = MaterialTheme.typography.labelSmall,
             color = StatusBlocked,
             modifier = Modifier.align(Alignment.CenterHorizontally)

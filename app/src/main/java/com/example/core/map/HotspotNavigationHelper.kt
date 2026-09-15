@@ -84,9 +84,30 @@ object HotspotNavigationHelper {
    * Membuat Intent peramban web fallback jika tidak ada aplikasi peta khusus.
    * Mengembalikan null jika koordinat tidak valid.
    */
-  fun createBrowserIntent(latitude: Double, longitude: Double): Intent? {
+  fun createBrowserIntent(
+    latitude: Double,
+    longitude: Double,
+    originLat: Double? = null,
+    originLon: Double? = null
+  ): Intent? {
     if (!validateCoordinates(latitude, longitude)) return null
-    val url = String.format(Locale.US, "https://www.google.com/maps/search/?api=1&query=%.6f,%.6f", latitude, longitude)
+    val url = if (originLat != null && originLon != null && validateCoordinates(originLat, originLon)) {
+      String.format(
+        Locale.US,
+        "https://www.google.com/maps/dir/?api=1&origin=%.6f,%.6f&destination=%.6f,%.6f",
+        originLat,
+        originLon,
+        latitude,
+        longitude
+      )
+    } else {
+      String.format(
+        Locale.US,
+        "https://www.google.com/maps/dir/?api=1&destination=%.6f,%.6f",
+        latitude,
+        longitude
+      )
+    }
     return Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
@@ -103,10 +124,12 @@ object HotspotNavigationHelper {
     context: Context,
     latitude: Double,
     longitude: Double,
-    label: String = "Titik Panas NASA FIRMS"
+    label: String = "Titik Panas NASA FIRMS",
+    originLat: Double? = null,
+    originLon: Double? = null
   ): NavigationResult {
     if (!validateCoordinates(latitude, longitude)) {
-      Toast.makeText(context, "Lokasi titik panas tidak valid.", Toast.LENGTH_SHORT).show()
+      Toast.makeText(context, "Koordinat titik panas tidak valid.", Toast.LENGTH_SHORT).show()
       return NavigationResult.InvalidCoordinates
     }
 
@@ -114,33 +137,50 @@ object HotspotNavigationHelper {
 
     // 1. Google Maps app
     val gmapsIntent = createGoogleMapsNavigationIntent(latitude, longitude, label)
-    if (gmapsIntent != null && gmapsIntent.resolveActivity(packageManager) != null) {
-      try {
-        context.startActivity(gmapsIntent)
-        return NavigationResult.Success("Google Maps", gmapsIntent)
-      } catch (_: Exception) {}
+    if (gmapsIntent != null) {
+      val isPackageInstalled = try {
+        packageManager.getPackageInfo("com.google.android.apps.maps", 0) != null
+      } catch (_: Exception) {
+        false
+      }
+      val canResolve = gmapsIntent.resolveActivity(packageManager) != null || isPackageInstalled
+      if (canResolve) {
+        try {
+          context.startActivity(gmapsIntent)
+          return NavigationResult.Success("Google Maps", gmapsIntent)
+        } catch (_: Exception) {}
+      }
     }
 
     // 2. Generic geo Intent
     val geoIntent = createGeoIntent(latitude, longitude, label)
-    if (geoIntent != null && geoIntent.resolveActivity(packageManager) != null) {
-      try {
-        context.startActivity(geoIntent)
-        return NavigationResult.Success("Aplikasi Peta Eksternal", geoIntent)
-      } catch (_: Exception) {}
+    if (geoIntent != null) {
+      if (geoIntent.resolveActivity(packageManager) != null) {
+        try {
+          context.startActivity(geoIntent)
+          return NavigationResult.Success("Aplikasi Peta Eksternal", geoIntent)
+        } catch (_: Exception) {}
+      }
     }
 
     // 3. Fallback peramban web
-    val browserIntent = createBrowserIntent(latitude, longitude)
-    if (browserIntent != null && browserIntent.resolveActivity(packageManager) != null) {
-      try {
-        context.startActivity(browserIntent)
-        return NavigationResult.Success("Peramban Web", browserIntent)
-      } catch (_: Exception) {}
+    val browserIntent = createBrowserIntent(latitude, longitude, originLat, originLon)
+    if (browserIntent != null) {
+      if (browserIntent.resolveActivity(packageManager) != null) {
+        try {
+          context.startActivity(browserIntent)
+          return NavigationResult.Success("Peramban Web", browserIntent)
+        } catch (_: Exception) {}
+      } else {
+        try {
+          context.startActivity(browserIntent)
+          return NavigationResult.Success("Peramban Web", browserIntent)
+        } catch (_: Exception) {}
+      }
     }
 
     // 4. Tidak ada aplikasi yang menangani
-    val message = "Tidak ada aplikasi navigasi atau peramban yang tersedia pada perangkat."
+    val message = "Perangkat tidak memiliki aplikasi atau peramban yang dapat digunakan untuk navigasi."
     Toast.makeText(context, message, Toast.LENGTH_LONG).show()
     return NavigationResult.NoAppAvailable(message)
   }

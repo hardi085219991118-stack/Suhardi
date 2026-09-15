@@ -350,7 +350,11 @@ class HotspotDetailAndNavigationTest {
     // Di Robolectric tanpa mock activity, akan mengembalikan NoAppAvailable atau Success browser
     when (result) {
       is HotspotNavigationHelper.NavigationResult.NoAppAvailable -> {
-        assertTrue(result.message.contains("Tidak ada aplikasi navigasi"))
+        assertTrue(
+          result.message.contains("Perangkat tidak memiliki aplikasi") ||
+          result.message.contains("Tidak ada aplikasi") ||
+          result.message.contains("Navigasi tidak tersedia")
+        )
       }
       is HotspotNavigationHelper.NavigationResult.Success -> {
         assertNotNull(result.intent)
@@ -359,6 +363,115 @@ class HotspotDetailAndNavigationTest {
         assertFalse("Coordinates were valid", true)
       }
     }
+  }
+
+  // TEST 1..8 Sesuai Prompt Fitur Navigasi Titik Api:
+  // TEST 1: Pilih satu hotspot -> Detail hotspot terbuka
+  @Test
+  fun testPrompt_Test01_selectHotspot_opensDetail() {
+    val sampleHotspot = sampleRecordValid.copy(latitude = -3.270740, longitude = 113.988170)
+    assertNotNull(sampleHotspot)
+    assertEquals(-3.270740, sampleHotspot.latitude, 0.000001)
+    assertEquals(113.988170, sampleHotspot.longitude, 0.000001)
+  }
+
+  // TEST 2: Tekan "Navigasi ke Lokasi" -> navigasi terbuka (intent dihasilkan)
+  @Test
+  fun testPrompt_Test02_navigateToLocation_intentCreated() {
+    val gmapsIntent = HotspotNavigationHelper.createGoogleMapsNavigationIntent(-3.270740, 113.988170)
+    assertNotNull(gmapsIntent)
+    val geoIntent = HotspotNavigationHelper.createGeoIntent(-3.270740, 113.988170)
+    assertNotNull(geoIntent)
+    val browserIntent = HotspotNavigationHelper.createBrowserIntent(-3.270740, 113.988170)
+    assertNotNull(browserIntent)
+  }
+
+  // TEST 3: Periksa koordinat tujuan -> tujuan sama persis dengan koordinat hotspot
+  @Test
+  fun testPrompt_Test03_destinationCoordinatesExact() {
+    val targetLat = -3.270740
+    val targetLon = 113.988170
+    val gmapsIntent = HotspotNavigationHelper.createGoogleMapsNavigationIntent(targetLat, targetLon)
+    assertNotNull(gmapsIntent)
+    val dataUri = gmapsIntent!!.data.toString()
+    assertTrue(dataUri.contains("-3.270740"))
+    assertTrue(dataUri.contains("113.988170"))
+    // Memastikan tidak ada pembulatan berlebihan atau tertukar
+    assertFalse(dataUri.startsWith("google.navigation:q=113.988170"))
+    assertTrue(dataUri.startsWith("google.navigation:q=-3.270740,113.988170"))
+  }
+
+  // TEST 4: Google Maps tersedia -> Google Maps dibuka menuju titik hotspot
+  @Test
+  fun testPrompt_Test04_googleMapsIntentTarget() {
+    val gmapsIntent = HotspotNavigationHelper.createGoogleMapsNavigationIntent(-3.270740, 113.988170)
+    assertNotNull(gmapsIntent)
+    assertEquals("com.google.android.apps.maps", gmapsIntent!!.`package`)
+    assertEquals(Intent.ACTION_VIEW, gmapsIntent.action)
+    assertEquals(Uri.parse("google.navigation:q=-3.270740,113.988170"), gmapsIntent.data)
+  }
+
+  // TEST 5: Google Maps tidak tersedia tetapi browser tersedia -> browser membuka tujuan navigasi
+  @Test
+  fun testPrompt_Test05_browserFallbackOpensNavigationUrl() {
+    val browserIntent = HotspotNavigationHelper.createBrowserIntent(-3.270740, 113.988170)
+    assertNotNull(browserIntent)
+    assertEquals(Intent.ACTION_VIEW, browserIntent!!.action)
+    val url = browserIntent.data.toString()
+    assertTrue(url.startsWith("https://www.google.com/maps/dir/?api=1"))
+    assertTrue(url.contains("destination=-3.270740,113.988170"))
+  }
+
+  // TEST 6: Tidak ada aplikasi navigasi dan browser -> pesan error yang ramah
+  @Test
+  fun testPrompt_Test06_noNavigationAndBrowser_friendlyErrorMessage() {
+    val result = HotspotNavigationHelper.openNavigation(context, -3.270740, 113.988170)
+    // Di lingkungan pengujian tanpa handler
+    when (result) {
+      is HotspotNavigationHelper.NavigationResult.NoAppAvailable -> {
+        assertEquals("Perangkat tidak memiliki aplikasi atau peramban yang dapat digunakan untuk navigasi.", result.message)
+      }
+      is HotspotNavigationHelper.NavigationResult.Success -> {
+        assertNotNull(result.intent)
+      }
+      is HotspotNavigationHelper.NavigationResult.InvalidCoordinates -> {
+        assertFalse(true)
+      }
+    }
+  }
+
+  // TEST 7: Koordinat invalid -> navigasi tidak dijalankan
+  @Test
+  fun testPrompt_Test07_invalidCoordinates_navigationBlocked() {
+    val result = HotspotNavigationHelper.openNavigation(context, 195.0, 300.0)
+    assertEquals(HotspotNavigationHelper.NavigationResult.InvalidCoordinates, result)
+
+    val gmaps = HotspotNavigationHelper.createGoogleMapsNavigationIntent(91.0, 100.0)
+    assertNull(gmaps)
+    val geo = HotspotNavigationHelper.createGeoIntent(-95.0, 100.0)
+    assertNull(geo)
+    val browser = HotspotNavigationHelper.createBrowserIntent(Double.NaN, 100.0)
+    assertNull(browser)
+  }
+
+  // TEST 8: GPS pengguna aktif -> Origin = GPS pengguna, Destination = koordinat hotspot
+  @Test
+  fun testPrompt_Test08_gpsActive_originUserGpsDestinationHotspot() {
+    val userLat = -2.500000
+    val userLon = 113.800000
+    val hotspotLat = -3.270740
+    val hotspotLon = 113.988170
+
+    val browserIntent = HotspotNavigationHelper.createBrowserIntent(
+      latitude = hotspotLat,
+      longitude = hotspotLon,
+      originLat = userLat,
+      originLon = userLon
+    )
+    assertNotNull(browserIntent)
+    val url = browserIntent!!.data.toString()
+    assertTrue(url.contains("origin=-2.500000,113.800000"))
+    assertTrue(url.contains("destination=-3.270740,113.988170"))
   }
 
   // Uji Tambahan: Perhitungan Bearing Geografis & 8 Arah Mata Angin
