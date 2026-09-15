@@ -120,6 +120,34 @@ import java.util.Locale
  * - Tidak ada koordinat hardcoded/dummy.
  * - Koordinat divalidasi ketat sebelum ditampilkan pada peta.
  */
+/**
+ * Konfigurasi layer, batas zoom, dan latar belakang tile untuk mencegah tampilan citra satelit putih saat zoom.
+ */
+private fun configureMapViewLayer(mapView: MapView, layer: BaseMapLayer) {
+  val expectedSource = MapTileProviderFactory.getTileSource(layer)
+  if (mapView.tileProvider.tileSource.name() != expectedSource.name()) {
+    mapView.setTileSource(expectedSource)
+  }
+  val maxZ = when (layer) {
+    BaseMapLayer.SATELLITE_ESRI -> 18.0
+    BaseMapLayer.SATELLITE_USGS -> 16.0
+    BaseMapLayer.OPEN_STREET_MAP -> 19.0
+  }
+  mapView.maxZoomLevel = maxZ
+  mapView.minZoomLevel = 3.0
+  if (mapView.zoomLevelDouble > maxZ) {
+    mapView.controller.setZoom(maxZ)
+  }
+  val isSatellite = layer != BaseMapLayer.OPEN_STREET_MAP
+  val bgCol = if (isSatellite) android.graphics.Color.rgb(18, 26, 20) else android.graphics.Color.rgb(238, 238, 238)
+  val lineCol = if (isSatellite) android.graphics.Color.rgb(26, 36, 28) else android.graphics.Color.rgb(218, 218, 218)
+  try {
+    mapView.overlayManager.tilesOverlay.loadingBackgroundColor = bgCol
+    mapView.overlayManager.tilesOverlay.loadingLineColor = lineCol
+    mapView.setBackgroundColor(bgCol)
+  } catch (_: Throwable) {}
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
@@ -220,13 +248,13 @@ fun MapScreen(
       isFallbackActive = true
       fallbackReason = outcome.checkResult.errorMessage ?: outcome.checkResult.failureReason?.userFriendlyMessage
       mapStatus = MapStatus.MAP_READY
-      mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(BaseMapLayer.OPEN_STREET_MAP))
+      mapViewRef?.let { configureMapViewLayer(it, BaseMapLayer.OPEN_STREET_MAP) }
       onMapStatusChanged(MapStatus.MAP_READY, BaseMapLayer.OPEN_STREET_MAP)
     } else if (outcome.checkResult.isValid) {
       isFallbackActive = false
       fallbackReason = null
       mapStatus = MapStatus.MAP_READY
-      mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(selectedBaseMapLayer))
+      mapViewRef?.let { configureMapViewLayer(it, selectedBaseMapLayer) }
       onMapStatusChanged(MapStatus.MAP_READY, selectedBaseMapLayer)
     } else {
       isFallbackActive = false
@@ -389,7 +417,7 @@ fun MapScreen(
                   },
                   onClick = {
                     selectedBaseMapLayer = layer
-                    mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(layer))
+                    mapViewRef?.let { configureMapViewLayer(it, layer) }
                     showLayerMenu = false
                   }
                 )
@@ -432,8 +460,9 @@ fun MapScreen(
           factory = { ctx ->
             try {
               MapView(ctx).apply {
-                setTileSource(MapTileProviderFactory.getTileSource(selectedBaseMapLayer))
                 setMultiTouchControls(true)
+                isTilesScaledToDpi = true
+                configureMapViewLayer(this, selectedBaseMapLayer)
                 controller.setZoom(5.0) // Neutral default world view before GPS fix
                 mapViewRef = this
               }
@@ -454,11 +483,9 @@ fun MapScreen(
           },
           update = { mv ->
             if (mv is MapView) {
-              // Update Tile Source if changed
-              val expectedSource = MapTileProviderFactory.getTileSource(selectedBaseMapLayer)
-              if (mv.tileProvider.tileSource.name() != expectedSource.name()) {
-                mv.setTileSource(expectedSource)
-              }
+              // Update layer configuration and zoom clamping
+              val activeEffectiveLayer = if (isFallbackActive) BaseMapLayer.OPEN_STREET_MAP else selectedBaseMapLayer
+              configureMapViewLayer(mv, activeEffectiveLayer)
 
               // 1. User Location Marker Fingerprint & Update
               val currentUserFingerprint = if (locationStatus == LocationStatus.LOCATION_AVAILABLE &&
@@ -594,7 +621,7 @@ fun MapScreen(
           isFallbackActive = false
           fallbackReason = null
           selectedBaseMapLayer = BaseMapLayer.SATELLITE_ESRI
-          mapViewRef?.setTileSource(MapTileProviderFactory.ESRI_WORLD_IMAGERY)
+          mapViewRef?.let { configureMapViewLayer(it, BaseMapLayer.SATELLITE_ESRI) }
           tileRetryKey++
         },
         locationStatus = locationStatus,
@@ -687,7 +714,12 @@ fun MapScreen(
             horizontalAlignment = Alignment.CenterHorizontally
           ) {
             IconButton(
-              onClick = { mapViewRef?.controller?.zoomIn() },
+              onClick = {
+                val mv = mapViewRef
+                if (mv != null && mv.zoomLevelDouble < mv.maxZoomLevel) {
+                  mv.controller.zoomIn()
+                }
+              },
               modifier = Modifier
                 .size(44.dp)
                 .testTag("zoom_in_button")
@@ -707,7 +739,12 @@ fun MapScreen(
             )
 
             IconButton(
-              onClick = { mapViewRef?.controller?.zoomOut() },
+              onClick = {
+                val mv = mapViewRef
+                if (mv != null && mv.zoomLevelDouble > mv.minZoomLevel) {
+                  mv.controller.zoomOut()
+                }
+              },
               modifier = Modifier
                 .size(44.dp)
                 .testTag("zoom_out_button")
@@ -899,7 +936,7 @@ fun MapScreen(
                     },
                     onClick = {
                       selectedBaseMapLayer = layer
-                      mapViewRef?.setTileSource(MapTileProviderFactory.getTileSource(layer))
+                      mapViewRef?.let { configureMapViewLayer(it, layer) }
                       showLayerMenu = false
                     }
                   )

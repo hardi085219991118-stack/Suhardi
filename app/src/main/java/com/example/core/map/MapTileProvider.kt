@@ -40,7 +40,7 @@ enum class BaseMapLayer(val displayName: String, val shortName: String, val prov
 class EsriWorldImageryTileSource : OnlineTileSourceBase(
   "EsriWorldImagery",
   0,
-  19,
+  18,
   256,
   "",
   arrayOf(
