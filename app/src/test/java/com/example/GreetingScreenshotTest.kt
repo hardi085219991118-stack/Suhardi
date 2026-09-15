@@ -172,15 +172,17 @@ class DashboardScreenComposeTest {
       }
     }
 
-    // Navigasi ke Layar Kontrak & Registri
+    // Navigasi ke Layar Kontrak & Registri via Tab Info
+    composeTestRule.onNodeWithTag("nav_tab_info").performClick()
     composeTestRule.onNodeWithTag("view_contract_button").performClick()
 
     // Verifikasi Foundation Contract & Registry tetap tampil (Regression Check)
     composeTestRule.onNodeWithTag("zero_dummy_card").assertIsDisplayed()
     composeTestRule.onNodeWithTag("evidence_status_card").assertIsDisplayed()
 
-    // Kembali ke Dashboard
+    // Kembali ke Dashboard & Tab Beranda
     composeTestRule.onNodeWithTag("back_to_dashboard_button").performClick()
+    composeTestRule.onNodeWithTag("nav_tab_beranda").performClick()
     composeTestRule.onNodeWithTag("fire_detection_card").assertIsDisplayed()
   }
 

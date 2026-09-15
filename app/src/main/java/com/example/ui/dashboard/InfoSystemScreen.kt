@@ -152,7 +152,10 @@ fun InfoSystemScreen(
 
       Box(modifier = Modifier.fillMaxSize()) {
         when (selectedSubTab) {
-          InfoSubTab.RINGKASAN -> RingkasanTabContent(state = state)
+          InfoSubTab.RINGKASAN -> RingkasanTabContent(
+            state = state,
+            onViewContract = onViewContract
+          )
           InfoSubTab.AUDIT_TEKNIS -> AuditTeknisTabContent(
             state = state,
             onViewContract = onViewContract,
@@ -175,7 +178,10 @@ fun InfoSystemScreen(
  * Screen 7: Ringkasan Status Sistem
  */
 @Composable
-private fun RingkasanTabContent(state: DashboardState) {
+private fun RingkasanTabContent(
+  state: DashboardState,
+  onViewContract: () -> Unit = {}
+) {
   Column(
     modifier = Modifier
       .fillMaxSize()
@@ -317,6 +323,20 @@ private fun RingkasanTabContent(state: DashboardState) {
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
       }
+    }
+
+    Button(
+      onClick = onViewContract,
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(50.dp)
+        .testTag("view_contract_button"),
+      colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E88E5)),
+      shape = RoundedCornerShape(12.dp)
+    ) {
+      Icon(Icons.Default.Shield, contentDescription = null)
+      Spacer(modifier = Modifier.width(8.dp))
+      Text("Lihat Kontrak & Registri Lengkap", fontWeight = FontWeight.Bold)
     }
 
     Spacer(modifier = Modifier.height(24.dp))

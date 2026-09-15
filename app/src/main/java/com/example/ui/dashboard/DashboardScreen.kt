@@ -355,28 +355,7 @@ fun DashboardScreen(
                 }
               }
             },
-            actions = {
-              TextButton(
-                onClick = { currentTab = AppBottomNavTab.PETA },
-                modifier = Modifier.testTag("open_map_button")
-              ) {
-                Text(
-                  text = "Peta",
-                  style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                  color = MaterialTheme.colorScheme.primary
-                )
-              }
-              TextButton(
-                onClick = { showContractScreen = true },
-                modifier = Modifier.testTag("view_contract_button")
-              ) {
-                Text(
-                  text = "Kontrak",
-                  style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                  color = MaterialTheme.colorScheme.primary
-                )
-              }
-            },
+            actions = {},
             colors = TopAppBarDefaults.topAppBarColors(
               containerColor = MaterialTheme.colorScheme.surface,
               titleContentColor = MaterialTheme.colorScheme.onSurface
