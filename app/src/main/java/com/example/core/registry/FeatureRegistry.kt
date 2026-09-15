@@ -1,0 +1,144 @@
+package com.example.core.registry
+
+import com.example.core.contract.FeatureContract
+import com.example.core.contract.FeatureStatus
+
+/**
+ * Master Feature Registry as required by Section 26.
+ * Zero-Dummy policy: FIRE-003 to FIRE-008 are strictly NOT_STARTED.
+ */
+object FeatureRegistry {
+
+  val features: List<FeatureContract> = listOf(
+    FeatureContract(
+      id = "FIRE-001",
+      name = "Master Development Contract",
+      purpose = "Menetapkan aturan absolut Zero-Dummy, validasi bertahap, status kejujuran, dan kontrak pengembangan bukti nyata.",
+      input = "Spesifikasi Prompt 001",
+      process = "Deklarasi kontrak, status enum, dan registry bukti nyata",
+      output = "Kontrak pengawasan arsitektur aktif",
+      dataSource = "Prompt 001 Engineering Contract",
+      dependencies = emptyList(),
+      successCriteria = "Semua aturan absolut terdokumentasi dan diimplementasikan tanpa dummy",
+      failureCriteria = "Adanya data dummy, koordinat palsu, atau klaim tidak terverifikasi",
+      testProcedure = "Audit statis kode, verifikasi integritas arsitektur",
+      verificationLevel = "GATE 2: IMPLEMENTATION COMPLETE",
+      status = FeatureStatus.IMPLEMENTED
+    ),
+    FeatureContract(
+      id = "FIRE-002",
+      name = "Android Project Foundation",
+      purpose = "Fondasi native Android Kotlin Jetpack Compose, package name, build configuration, struktur modular, dan error logging.",
+      input = "Android SDK & Jetpack Compose toolchain",
+      process = "Konfigurasi Gradle, themes, strings, modular packages, unit tests",
+      output = "Aplikasi terkompilasi siap pengembangan bertahap",
+      dataSource = "Android Gradle Build System",
+      dependencies = listOf("androidx.compose", "androidx.core.ktx", "material3"),
+      successCriteria = "Gradle build sukses, unit test Robolectric lolos",
+      failureCriteria = "Kompilasi error atau kegagalan konfigurasi project",
+      testProcedure = "compile_applet & gradle unit test",
+      verificationLevel = "GATE 2: IMPLEMENTATION COMPLETE",
+      status = FeatureStatus.IMPLEMENTED
+    ),
+    FeatureContract(
+      id = "FIRE-003",
+      name = "Dashboard",
+      purpose = "Layar utama monitoring status aplikasi dan hotspot wilayah Hardi Mantangai secara jujur tanpa dummy.",
+      input = "DashboardState (DataState NOT_AVAILABLE / NOT_VERIFIED)",
+      process = "Render status sistem, indikator lokasi jujur, kartu titik api non-dummy, kartu satelit, dan last update",
+      output = "DashboardScreen M3 berbasis Jetpack Compose",
+      dataSource = "Internal System State & Zero-Dummy Contract",
+      dependencies = listOf("FIRE-001", "FIRE-002", "androidx.compose.material3"),
+      successCriteria = "Judul, system status, location card, fire detection card, satellite data card, dan last update tampil tanpa data dummy",
+      failureCriteria = "Menampilkan marker atau angka palsu, klaim GPS/satelit aktif padahal belum diintegrasikan",
+      testProcedure = "Robolectric Compose UI test & Activity launch test",
+      verificationLevel = "GATE 3: RUNTIME VERIFIED (LOCAL)",
+      status = FeatureStatus.RUNTIME_VERIFIED,
+      knownLimitations = "FIRE-004 GPS & FIRE-006 Real Fire Data Source belum aktif. Menampilkan status NOT_AVAILABLE / NOT_VERIFIED secara jujur."
+    ),
+    FeatureContract(
+      id = "FIRE-004",
+      name = "Device GPS",
+      purpose = "Akuisisi lokasi riil perangkat Android secara presisi tanpa koordinat palsu",
+      input = "Android LocationManager (GPS_PROVIDER / NETWORK_PROVIDER)",
+      process = "Pemeriksaan runtime permissions, verifikasi provider GPS, request location fix nyata, sanity check (-90..90, -180..180, acc >= 0), dan update Dashboard",
+      output = "DeviceLocation nyata (latitude, longitude, accuracy, fix timestamp, provider)",
+      dataSource = "Android Location Service nyata (Zero dummy)",
+      dependencies = listOf("android.permission.ACCESS_FINE_LOCATION", "android.permission.ACCESS_COARSE_LOCATION"),
+      successCriteria = "Mendapatkan lokasi riil dari sensor GPS atau menampilkan state jujur saat izin/provider tidak tersedia",
+      failureCriteria = "Koordinat hardcoded atau lokasi default dianggap lokasi pengguna",
+      testProcedure = "Unit test permission flow & provider state, Robolectric sanity check, Compose UI test",
+      verificationLevel = "GATE 2: REAL_DEVICE_VERIFICATION_PENDING (REAL DEVICE GPS NOT VERIFIED)",
+      status = FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING,
+      knownLimitations = "REAL DEVICE GPS NOT VERIFIED: APK telah diuji pada perangkat fisik Android dan memperoleh koordinat GPS riil. Namun status formal REAL_DEVICE_VERIFIED tetap ditahan sebagai REAL_DEVICE_VERIFICATION_PENDING sampai verifikasi fisik manual lapangan (13 kriteria Prompt 005C) ditandatangani secara resmi."
+    ),
+    FeatureContract(
+      id = "FIRE-005",
+      name = "Map Foundation",
+      purpose = "Visualisasi peta geografis wilayah berbasis osmdroid OpenStreetMap & posisi nyata GPS pengguna",
+      input = "DeviceLocation terverifikasi dari FIRE-004",
+      process = "Inisialisasi MapView OpenStreetMap native (osmdroid), validasi rentang koordinat geografis, rendering marker posisi pengguna jika valid, zero fire markers policy",
+      output = "Layer peta nyata interaktif dengan marker posisi GPS pengguna",
+      dataSource = "osmdroid OpenStreetMap Standard Tiles (Mapnik)",
+      dependencies = listOf("FIRE-004"),
+      successCriteria = "MapView tampil dengan tile OpenStreetMap, posisi pengguna dirender sesuai koordinat GPS nyata, validasi koordinat mencegah out-of-bounds, zero fire markers sampai data satelit aktif",
+      failureCriteria = "Marker contoh dibuat tanpa data nyata, hardcoded dummy coordinates, atau penambahan marker api sebelum FIRE-006",
+      testProcedure = "Robolectric MapFoundationRobolectricTest, CoordinateValidator boundary test, MapStatus lifecycle test, Dashboard integration test",
+      verificationLevel = "GATE 2: REAL_DEVICE_VERIFICATION_PENDING (REAL DEVICE GPS NOT VERIFIED)",
+      status = FeatureStatus.REAL_DEVICE_VERIFICATION_PENDING,
+      knownLimitations = "REAL DEVICE GPS NOT VERIFIED: APK telah diuji pada perangkat fisik Android dan peta memusatkan marker pada koordinat GPS riil pengguna. Status formal verifikasi lapangan fisik tetap REAL_DEVICE_VERIFICATION_PENDING hingga 13 kriteria audit Prompt 005C terpenuhi."
+    ),
+    FeatureContract(
+      id = "FIRE-006",
+      name = "Real Fire Data Source",
+      purpose = "Koneksi API / data satelit hotspot riil NASA FIRMS (VIIRS NOAA-21, NOAA-20, Suomi-NPP, MODIS) secara jujur tanpa data dummy.",
+      input = "NASA FIRMS MAP_KEY, query bounding box wilayah, sensor source resmi",
+      process = "Abstraksi kredensial client-only, koneksi HTTP OkHttp ke NASA FIRMS CSV Web Services, parsing dan validasi ketat koordinat & waktu akuisisi UTC satelit, pemisahan fetch time vs satellite acquisition time, cooldown proteksi API, penanganan status offline & error jaringan.",
+      output = "FireDataResponse nyata dengan FireDataRecord otentik atau status error jujur (bukan 0 titik api palsu)",
+      dataSource = "NASA FIRMS Web Services (VIIRS NOAA-21 / NOAA-20 / Suomi-NPP & MODIS)",
+      dependencies = listOf("FIRE-001", "FIRE-002", "FIRE-003"),
+      successCriteria = "Response NASA FIRMS valid menghasilkan record otentik; jika gagal menampilkan status jujur (API_CREDENTIAL_REQUIRED / NETWORK_ERROR / TIMEOUT / DATA_SOURCE_UNAVAILABLE); count unknown saat gagal; count 0 hanya jika response valid dengan 0 deteksi; zero fire markers",
+      failureCriteria = "Penggunaan titik api dummy, koordinat palsu, timestamp tiruan dari waktu HP, atau menampilkan 0 api saat request gagal",
+      testProcedure = "Unit tests parser CSV FIRMS, validasi rentang koordinat, simulasi response HTTP 200/400/401/403/429/500/timeout, dan Robolectric UI tests",
+      verificationLevel = "GATE 2: IMPLEMENTATION COMPLETE",
+      status = FeatureStatus.IMPLEMENTED,
+      knownLimitations = "Fondasi data satelit aktif. Filter spasial wilayah (FIRE-007) dan visualisasi marker titik api pada peta (FIRE-008) tetap strictly NOT_STARTED."
+    ),
+    FeatureContract(
+      id = "FIRE-007",
+      name = "Fire Data Processing",
+      purpose = "Filter, parsing, validasi koordinat dan evaluasi usia data hotspot wilayah observasi secara otentik.",
+      input = "Response CSV NASA FIRMS dari FIRE-006",
+      process = "Parsing CSV dengan FireDataParser, validasi batas koordinat geografis dan rentang acq_date/acq_time UTC, kalkulasi usia observasi data satelit (FireDataAgeCalculator), evaluasi kesegaran data (FireDataFreshnessStatus).",
+      output = "List<FireDataRecord> otentik yang valid atau state kegagalan jujur",
+      dataSource = "NASA FIRMS Web Services melalui FIRE-006",
+      dependencies = listOf("FIRE-006"),
+      successCriteria = "Record divalidasi ketat (-90..90, -180..180, bukan 0/0 anomali, UTC timestamp terbukti), usia data dikelompokkan jujur",
+      failureCriteria = "Penggunaan record korup, modifikasi timestamp tiruan, atau pembuatan titik sintetis",
+      testProcedure = "Unit test parsing CSV, validasi koordinat, kalkulasi usia data satelit",
+      verificationLevel = "GATE 2: IMPLEMENTATION COMPLETE",
+      status = FeatureStatus.IMPLEMENTED,
+      knownLimitations = "Hanya memproses hotspot yang memenuhi validasi koordinat dan timestamp UTC dari overpass satelit."
+    ),
+    FeatureContract(
+      id = "FIRE-008",
+      name = "Verified Fire Markers",
+      purpose = "Rendering marker titik api pada MapView osmdroid berdasarkan data satelit otentik yang terverifikasi.",
+      input = "List<FireDataRecord> valid dan FireDataSourceState dari FIRE-007",
+      process = "Menambahkan marker titik api pada koordinat nyata satelit HANYA saat status data adalah DATA_SOURCE_AVAILABLE atau CACHED dengan record valid; menampilkan dialog detail otentik saat marker disentuh; layer toggle base map.",
+      output = "Marker titik api terverifikasi pada peta geografis dengan detail akuisisi lengkap",
+      dataSource = "FIRE-007 (NASA FIRMS Hotspots)",
+      dependencies = listOf("FIRE-005", "FIRE-007"),
+      successCriteria = "Marker titik api hanya dirender jika data nyata tersedia; menampilkan 0 marker jika data unverified atau query 0 deteksi; detail marker jujur",
+      failureCriteria = "Marker api muncul dari data palsu, posisi HP dijadikan marker api, atau marker dibuat saat data belum terverifikasi",
+      testProcedure = "Robolectric UI test rendering marker saat data tersedia vs unverified",
+      verificationLevel = "GATE 2: IMPLEMENTATION COMPLETE",
+      status = FeatureStatus.IMPLEMENTED,
+      knownLimitations = "Marker titik api bergantung pada ketersediaan koneksi internet dan MAP_KEY resmi NASA FIRMS."
+    )
+  )
+
+  fun getFeature(id: String): FeatureContract? {
+    return features.firstOrNull { it.id == id }
+  }
+}
