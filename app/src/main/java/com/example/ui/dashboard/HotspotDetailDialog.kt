@@ -436,7 +436,7 @@ private fun formatDisplayDate(acqDate: String): String {
   return try {
     val input = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(acqDate.trim())
     if (input != null) {
-      SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")).format(input)
+      SimpleDateFormat("dd MMM yyyy", Locale.forLanguageTag("id-ID")).format(input)
     } else {
       acqDate
     }
