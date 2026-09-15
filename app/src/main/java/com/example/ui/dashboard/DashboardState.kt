@@ -50,7 +50,7 @@ data class DashboardState(
 
   // Satellite Data State (FIRE-006)
   val satelliteState: DataState = DataState.NOT_VERIFIED,
-  val satelliteDisplay: String = "BELUM TERSEDIA",
+  val satelliteDisplay: String = "Belum tersedia",
   val satelliteNote: String = "DATA SOURCE NOT VERIFIED (Modul FIRE-006 belum aktif).",
   val satelliteSensorName: String = "NASA FIRMS (VIIRS NOAA-21 / NOAA-20 / SNPP / MODIS)",
   val freshnessLevel: com.example.core.fire.FreshnessLevel = com.example.core.fire.FreshnessLevel.FRESHNESS_UNKNOWN,
@@ -59,9 +59,9 @@ data class DashboardState(
 
   // Last Satellite Update State
   val lastUpdateState: DataState = DataState.NOT_AVAILABLE,
-  val lastUpdateDisplay: String = "BELUM TERSEDIA",
+  val lastUpdateDisplay: String = "Belum tersedia",
   val lastUpdateNote: String = "Waktu akuisisi satelit belum tersedia. Waktu perangkat tidak disamakan dengan waktu satelit (Aturan 7).",
-  val lastFetchDisplay: String = "BELUM PERNAH",
+  val lastFetchDisplay: String = "Belum pernah",
 
   val isRefreshSatelliteEnabled: Boolean = true,
   val isLoadingSatellite: Boolean = false,

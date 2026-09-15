@@ -920,7 +920,7 @@ private fun MapStatusBar(
           modifier = Modifier.size(16.dp)
         )
         val mapStatusLabel = when (mapStatus) {
-          MapStatus.MAP_READY -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Tersedia" else "Citra Satelit Siap"
+          MapStatus.MAP_READY -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Siap" else "Citra Satelit Siap"
           MapStatus.MAP_ERROR -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Gagal" else "Peta Satelit Gagal"
           MapStatus.MAP_LOADING -> if (activeLayer == BaseMapLayer.OPEN_STREET_MAP) "Memuat Peta Jalan..." else "Memuat Citra Satelit..."
         }
@@ -947,13 +947,13 @@ private fun MapStatusBar(
           LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) Icons.Default.LocationOn else Icons.Default.Warning
           LocationStatus.LOCATION_LOADING -> Icons.Default.GpsFixed
           LocationStatus.LOCATION_PROVIDER_DISABLED -> Icons.Default.GpsOff
-          LocationStatus.LOCATION_PERMISSION_DENIED -> Icons.Default.LocationOff
+          LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> Icons.Default.LocationOff
           else -> Icons.Default.LocationOff
         }
         val locColor = when (locationStatus) {
           LocationStatus.LOCATION_AVAILABLE -> if (isValidCoordinate) StatusVerified else StatusBlocked
           LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
-          LocationStatus.LOCATION_ERROR, LocationStatus.LOCATION_PERMISSION_DENIED -> StatusBlocked
+          LocationStatus.LOCATION_ERROR, LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PROVIDER_DISABLED, LocationStatus.LOCATION_PERMISSION_REQUIRED -> StatusBlocked
           else -> StatusNotStarted
         }
 
@@ -966,10 +966,10 @@ private fun MapStatusBar(
         val locText = when {
           locationStatus == LocationStatus.LOCATION_AVAILABLE && !isValidCoordinate -> "KOORDINAT TIDAK VALID"
           locationStatus == LocationStatus.LOCATION_AVAILABLE -> "GPS AKTIF"
-          locationStatus == LocationStatus.LOCATION_LOADING -> "MENCARI GPS..."
+          locationStatus == LocationStatus.LOCATION_LOADING -> "MENCARI SINYAL GPS..."
           locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS NONAKTIF"
-          locationStatus == LocationStatus.LOCATION_PERMISSION_DENIED -> "IZIN DITOLAK"
-          else -> locationStatus.name
+          locationStatus == LocationStatus.LOCATION_PERMISSION_DENIED || locationStatus == LocationStatus.LOCATION_PERMISSION_REQUIRED -> "IZIN LOKASI BELUM DIBERIKAN"
+          else -> "STATUS LOKASI"
         }
         Text(
           text = locText,
@@ -999,6 +999,7 @@ fun UserLocationInfoCard(
   fireDataSourceState: FireDataSourceState = FireDataSourceState.NOT_VERIFIED,
   modifier: Modifier = Modifier
 ) {
+  val context = LocalContext.current
   val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.getDefault()) }
 
   Card(
@@ -1452,10 +1453,9 @@ fun UserLocationInfoCard(
         locationStatus == LocationStatus.LOCATION_PERMISSION_DENIED -> {
           Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-              text = "LOCATION PERMISSION DENIED",
+              text = "Izin lokasi belum diberikan",
               style = MaterialTheme.typography.bodyMedium.copy(
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
                 color = StatusBlocked
               )
             )
@@ -1464,12 +1464,13 @@ fun UserLocationInfoCard(
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(6.dp))
-            OutlinedButton(
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
               onClick = onRequestPermission,
-              modifier = Modifier.fillMaxWidth()
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853))
             ) {
-              Text("MINTA IZIN LOKASI LAGI")
+              Text("Minta Izin Lokasi", fontWeight = FontWeight.Bold)
             }
           }
         }
@@ -1477,18 +1478,30 @@ fun UserLocationInfoCard(
         locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED -> {
           Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-              text = "LOCATION PROVIDER DISABLED",
+              text = "GPS nonaktif",
               style = MaterialTheme.typography.bodyMedium.copy(
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
                 color = StatusBlocked
               )
             )
             Text(
-              text = "Sensor GPS nonaktif pada perangkat. Aktifkan GPS untuk menampilkan posisi saya di peta.",
+              text = "Sensor GPS nonaktif pada perangkat. Aktifkan GPS untuk menampilkan posisi Anda di peta.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+              onClick = {
+                try {
+                  val intent = android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                  context.startActivity(intent)
+                } catch (_: Exception) {}
+              },
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100))
+            ) {
+              Text("Buka Pengaturan Lokasi", fontWeight = FontWeight.Bold)
+            }
           }
         }
 

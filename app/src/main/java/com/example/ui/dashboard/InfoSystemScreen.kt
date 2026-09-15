@@ -203,7 +203,7 @@ private fun RingkasanTabContent(state: DashboardState) {
 
         StatusItemRow(
           title = "Waktu Akuisisi Satelit",
-          subtitle = if (state.lastUpdateDisplay != "BELUM TERSEDIA") state.lastUpdateDisplay else "Data resmi NASA FIRMS",
+          subtitle = if (state.lastUpdateDisplay.isNotBlank() && state.lastUpdateDisplay != "BELUM TERSEDIA" && state.lastUpdateDisplay != "Belum tersedia") state.lastUpdateDisplay else "Belum tersedia",
           badgeText = null,
           badgeColor = Color.Transparent
         )
@@ -211,51 +211,69 @@ private fun RingkasanTabContent(state: DashboardState) {
 
         StatusItemRow(
           title = "Waktu Pengambilan Data",
-          subtitle = if (state.lastFetchDisplay != "BELUM PERNAH") state.lastFetchDisplay else "Sesi aktif saat ini",
+          subtitle = if (state.lastFetchDisplay.isNotBlank() && state.lastFetchDisplay != "BELUM PERNAH" && state.lastFetchDisplay != "Belum pernah") state.lastFetchDisplay else "Belum pernah",
           badgeText = null,
           badgeColor = Color.Transparent
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
+        val hasValidSat = state.fireDataState == DataState.AVAILABLE && state.satelliteDisplay.isNotBlank() && state.satelliteDisplay != "BELUM TERSEDIA" && state.satelliteDisplay != "Belum tersedia" && state.satelliteDisplay != "READY FOR LIVE REQUEST"
+        val activeSat = if (hasValidSat) state.satelliteDisplay else "Belum tersedia"
         StatusItemRow(
           title = "Satelit Aktif",
-          subtitle = "NOAA-21 (VIIRS NRT)",
-          badgeText = "Aktif",
-          badgeColor = StatusVerified
+          subtitle = activeSat,
+          badgeText = if (hasValidSat) "Aktif" else "Belum Tersedia",
+          badgeColor = if (hasValidSat) StatusVerified else StatusNotStarted
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
+        val locSubtitle = when (state.locationStatus) {
+          LocationStatus.LOCATION_AVAILABLE -> if (state.deviceLocation?.accuracyMeters != null) "GPS aktif (± ${state.deviceLocation.accuracyMeters.toInt()} m)" else "GPS aktif"
+          LocationStatus.LOCATION_LOADING -> "Mencari sinyal GPS..."
+          LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED -> "Izin lokasi belum diberikan"
+          LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS nonaktif"
+          else -> "Belum tersedia"
+        }
+        val locBadge = when (state.locationStatus) {
+          LocationStatus.LOCATION_AVAILABLE -> "GPS Aktif"
+          LocationStatus.LOCATION_LOADING -> "Mencari"
+          LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED -> "Perlu Izin"
+          LocationStatus.LOCATION_PROVIDER_DISABLED -> "Nonaktif"
+          else -> "Belum Ada"
+        }
+        val locColor = when (state.locationStatus) {
+          LocationStatus.LOCATION_AVAILABLE -> StatusVerified
+          LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
+          LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED, LocationStatus.LOCATION_PROVIDER_DISABLED, LocationStatus.LOCATION_ERROR -> StatusBlocked
+          else -> StatusNotStarted
+        }
         StatusItemRow(
           title = "Lokasi Perangkat",
-          subtitle = if (state.locationStatus == LocationStatus.LOCATION_AVAILABLE && state.deviceLocation != null) {
-            "Tersedia (± ${state.deviceLocation.accuracyMeters?.toInt() ?: 10} m)"
-          } else {
-            "Belum Tersedia"
-          },
-          badgeText = if (state.locationStatus == LocationStatus.LOCATION_AVAILABLE) "Tersedia" else "Nonaktif",
-          badgeColor = if (state.locationStatus == LocationStatus.LOCATION_AVAILABLE) StatusVerified else StatusNotStarted
+          subtitle = locSubtitle,
+          badgeText = locBadge,
+          badgeColor = locColor
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
         val (mapSubtitle, mapBadge, mapColor) = when (state.mapStatus) {
           com.example.ui.map.MapStatus.MAP_LOADING -> {
             val text = if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
-              "Peta jalan sedang dimuat..."
+              "Memuat peta jalan..."
             else
-              "Citra satelit sedang dimuat..."
-            Triple(text, "MEMUAT", StatusNotStarted)
+              "Memuat citra satelit..."
+            Triple(text, "MEMUAT", MaterialTheme.colorScheme.primary)
           }
           com.example.ui.map.MapStatus.MAP_READY -> {
             if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
-              Triple("Peta jalan tersedia — citra satelit tidak tersedia", "PETA JALAN", StatusVerified)
+              Triple("Peta Jalan Siap", "PETA JALAN", StatusVerified)
             else
-              Triple("Citra satelit siap digunakan", "TERSEDIA", StatusVerified)
+              Triple("Citra Satelit Siap", "CITRA SATELIT", StatusVerified)
           }
           com.example.ui.map.MapStatus.MAP_ERROR -> {
             val text = if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP)
-              "Peta jalan tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
+              "Peta jalan tidak dapat dimuat. Periksa koneksi internet."
             else
-              "Peta satelit tidak dapat dimuat. Periksa koneksi internet lalu coba lagi."
+              "Citra satelit tidak dapat dimuat. Periksa koneksi internet."
             Triple(text, "GAGAL", StatusBlocked)
           }
         }

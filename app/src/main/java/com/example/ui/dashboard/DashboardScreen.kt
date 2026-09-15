@@ -259,6 +259,12 @@ fun DashboardScreen(
           )
         )
       },
+      onOpenLocationSettings = {
+        try {
+          val intent = android.content.Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+          context.startActivity(intent)
+        } catch (_: Exception) {}
+      },
       onOpenMap = {
         showMyLocationScreen = false
         currentTab = AppBottomNavTab.PETA
@@ -540,48 +546,59 @@ fun PrimaryActionButtonsSection(
     }
 
     // 4. 🔄 Perbarui Data Satelit
-    Button(
-      onClick = onRefreshSatellite,
-      enabled = !isRefreshing && cooldownSeconds <= 0L,
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(54.dp)
-        .testTag("primary_refresh_satellite_button"),
-      colors = ButtonDefaults.buttonColors(
-        containerColor = Color(0xFF263238),
-        contentColor = Color.White,
-        disabledContainerColor = Color(0xFF37474F).copy(alpha = 0.6f),
-        disabledContentColor = Color.White.copy(alpha = 0.6f)
-      ),
-      shape = RoundedCornerShape(14.dp)
-    ) {
-      if (isRefreshing) {
-        CircularProgressIndicator(
-          modifier = Modifier.size(20.dp),
-          color = Color.White,
-          strokeWidth = 2.dp
-        )
-        Spacer(modifier = Modifier.width(10.dp))
+    Column(modifier = Modifier.fillMaxWidth()) {
+      Button(
+        onClick = onRefreshSatellite,
+        enabled = !isRefreshing && cooldownSeconds <= 0L,
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(54.dp)
+          .testTag("primary_refresh_satellite_button"),
+        colors = ButtonDefaults.buttonColors(
+          containerColor = Color(0xFF263238),
+          contentColor = Color.White,
+          disabledContainerColor = Color(0xFF37474F).copy(alpha = 0.6f),
+          disabledContentColor = Color.White.copy(alpha = 0.6f)
+        ),
+        shape = RoundedCornerShape(14.dp)
+      ) {
+        if (isRefreshing) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(20.dp),
+            color = Color.White,
+            strokeWidth = 2.dp
+          )
+          Spacer(modifier = Modifier.width(10.dp))
+          Text(
+            text = "Menghubungkan ke NASA FIRMS...",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+          )
+        } else if (cooldownSeconds > 0L) {
+          Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(22.dp))
+          Spacer(modifier = Modifier.width(10.dp))
+          Text(
+            text = "Data baru saja diperbarui",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+          )
+        } else {
+          Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(22.dp))
+          Spacer(modifier = Modifier.width(10.dp))
+          Text(
+            text = "🔄 Perbarui Data Satelit",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+          )
+        }
+      }
+      if (cooldownSeconds > 0L) {
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
-          text = "Memperbarui Data...",
-          fontSize = 15.sp,
-          fontWeight = FontWeight.Bold
-        )
-      } else if (cooldownSeconds > 0L) {
-        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-          text = "COOLDOWN (${cooldownSeconds}s)",
-          fontSize = 15.sp,
-          fontWeight = FontWeight.Bold
-        )
-      } else {
-        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(22.dp))
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-          text = "🔄 Perbarui Data Satelit",
-          fontSize = 15.sp,
-          fontWeight = FontWeight.Bold
+          text = "Tunggu sebelum memperbarui lagi.",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(start = 6.dp)
         )
       }
     }
@@ -675,15 +692,12 @@ fun RealLocationCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        val cardTitle = when {
-          state.deviceLocation?.verificationLevel == LocationVerificationLevel.REAL_DEVICE_VERIFIED -> "REAL DEVICE: VERIFIED"
-          state.deviceLocation?.isMock == true -> "LOCATION: MOCK LOCATION"
-          state.deviceLocation?.isFromCache == true -> "LOCATION: CACHED LOCATION"
-          state.deviceLocation?.runtimeEnvironment == RuntimeEnvironment.EMULATOR -> "RUNTIME: EMULATOR (VIRTUAL)"
-          state.deviceLocation?.runtimeEnvironment == RuntimeEnvironment.VIRTUAL_DEVICE -> "RUNTIME: VIRTUAL DEVICE"
-          state.deviceLocation?.runtimeEnvironment == RuntimeEnvironment.CLOUD_CONTAINER -> "RUNTIME: CLOUD CONTAINER"
-          state.locationStatus == LocationStatus.LOCATION_AVAILABLE -> "REAL DEVICE: NOT VERIFIED"
-          else -> "LOKASI PERANGKAT"
+        val cardTitle = when (state.locationStatus) {
+          LocationStatus.LOCATION_LOADING -> "Mencari sinyal GPS..."
+          LocationStatus.LOCATION_AVAILABLE -> "GPS aktif"
+          LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED -> "Izin lokasi belum diberikan"
+          LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS nonaktif"
+          else -> "Status Lokasi"
         }
 
         Row(
@@ -717,7 +731,14 @@ fun RealLocationCard(
           )
         }
 
-        val badgeText = state.locationStatus.name
+        val badgeText = when (state.locationStatus) {
+          LocationStatus.LOCATION_AVAILABLE -> "GPS Aktif"
+          LocationStatus.LOCATION_LOADING -> "Mencari Sinyal"
+          LocationStatus.LOCATION_PERMISSION_REQUIRED -> "Perlu Izin"
+          LocationStatus.LOCATION_PERMISSION_DENIED -> "Izin Ditolak"
+          LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS Nonaktif"
+          else -> "Belum Tersedia"
+        }
         val badgeColor = when (state.locationStatus) {
           LocationStatus.LOCATION_AVAILABLE -> StatusVerified
           LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
@@ -1251,7 +1272,7 @@ fun FireDetectionCard(state: DashboardState) {
     DataState.ERROR -> StatusBlocked
     else -> StatusNotStarted
   }
-  val isVerified = state.fireDataState == DataState.AVAILABLE || state.validFireRecordCount != null || state.fireRecords.isNotEmpty()
+  val isVerified = state.fireDataState == DataState.AVAILABLE && (state.validFireRecordCount != null || state.fireRecords.isNotEmpty())
   val statusDataText = when (state.fireDataState) {
     DataState.AVAILABLE -> "Tersedia (${state.fireRecords.size} valid)"
     DataState.NOT_VERIFIED -> state.fireStatusText
@@ -1259,12 +1280,18 @@ fun FireDetectionCard(state: DashboardState) {
     else -> state.fireStatusText
   }
 
-  val satText = if (state.satelliteDisplay != "BELUM TERSEDIA") state.satelliteDisplay else "VIIRS / NOAA-21 (NRT)"
+  val satText = if (state.fireDataState == DataState.AVAILABLE && state.satelliteDisplay.isNotBlank() && state.satelliteDisplay != "BELUM TERSEDIA" && state.satelliteDisplay != "Belum tersedia" && state.satelliteDisplay != "READY FOR LIVE REQUEST") {
+    state.satelliteDisplay
+  } else {
+    "Belum tersedia"
+  }
   val ageText = if (state.fireRecords.isNotEmpty()) {
     val latestTs = state.fireRecords.mapNotNull { it.acquisitionTimestampMillis }.maxOrNull() ?: 0L
-    if (latestTs > 0L) com.example.core.fire.FireDataAgeCalculator.formatAgeDetail(latestTs) else "Data NRT terkini"
+    if (latestTs > 0L) com.example.core.fire.FireDataAgeCalculator.formatAgeDetail(latestTs) else "Belum tersedia"
+  } else if (state.fireDataState == DataState.AVAILABLE && state.dataAgeDisplay.isNotBlank() && state.dataAgeDisplay != "BELUM TERSEDIA" && state.dataAgeDisplay != "Belum tersedia") {
+    state.dataAgeDisplay
   } else {
-    if (state.dataAgeDisplay != "BELUM TERSEDIA") state.dataAgeDisplay else "Data NRT terkini"
+    "Belum tersedia"
   }
 
   Card(
@@ -1364,7 +1391,7 @@ fun FireDetectionCard(state: DashboardState) {
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-          text = if (state.lastUpdateDisplay != "BELUM TERSEDIA") state.lastUpdateDisplay else "Data resmi NASA FIRMS",
+          text = if (state.lastUpdateDisplay.isNotBlank() && state.lastUpdateDisplay != "BELUM TERSEDIA" && state.lastUpdateDisplay != "Belum tersedia") state.lastUpdateDisplay else "Belum tersedia",
           style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
           color = MaterialTheme.colorScheme.onSurface
         )
@@ -1849,7 +1876,7 @@ fun RefreshSection(
             modifier = Modifier.size(18.dp)
           )
           Spacer(modifier = Modifier.width(8.dp))
-          Text("COOLDOWN (${state.cooldownRemainingSeconds}s)")
+          Text("Data baru saja diperbarui")
         } else {
           Icon(
             imageVector = Icons.Default.Refresh,
@@ -1864,7 +1891,7 @@ fun RefreshSection(
       Spacer(modifier = Modifier.height(8.dp))
 
       Text(
-        text = state.refreshSatelliteNote,
+        text = if (isCooldown) "Data baru saja diperbarui. Tunggu sebelum memperbarui lagi." else state.refreshSatelliteNote,
         style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -1994,8 +2021,13 @@ fun MapFoundationCard(
             color = MaterialTheme.colorScheme.onSurface
           )
         }
+        val mapStatusBadge = when (state.mapStatus) {
+          MapStatus.MAP_READY -> if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP) "PETA JALAN SIAP" else "CITRA SATELIT SIAP"
+          MapStatus.MAP_ERROR -> if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP) "PETA JALAN GAGAL" else "PETA SATELIT GAGAL"
+          MapStatus.MAP_LOADING -> if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP) "MEMUAT PETA JALAN..." else "MEMUAT CITRA SATELIT..."
+        }
         StateBadge(
-          text = state.mapStatus.name,
+          text = mapStatusBadge,
           color = when (state.mapStatus) {
             MapStatus.MAP_READY -> StatusVerified
             MapStatus.MAP_ERROR -> StatusBlocked
@@ -2017,8 +2049,13 @@ fun MapFoundationCard(
             text = "MAP STATUS",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
           )
+          val mapStatusText = when (state.mapStatus) {
+            MapStatus.MAP_READY -> if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Siap" else "Citra Satelit Siap"
+            MapStatus.MAP_ERROR -> if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP) "Peta Jalan Gagal" else "Peta Satelit Gagal"
+            MapStatus.MAP_LOADING -> if (state.activeBaseMapLayer == com.example.core.map.BaseMapLayer.OPEN_STREET_MAP) "Memuat Peta Jalan..." else "Memuat Citra Satelit..."
+          }
           Text(
-            text = state.mapStatus.name,
+            text = mapStatusText,
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold),
             modifier = Modifier.testTag("map_status_text")
           )

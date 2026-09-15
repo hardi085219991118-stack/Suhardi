@@ -62,6 +62,7 @@ fun MyLocationScreen(
   onBack: () -> Unit,
   onRefreshLocation: () -> Unit,
   onRequestPermission: () -> Unit,
+  onOpenLocationSettings: () -> Unit = {},
   onOpenMap: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -108,35 +109,58 @@ fun MyLocationScreen(
     ) {
       Spacer(modifier = Modifier.height(24.dp))
 
-      // Big Circle Pin Indicator (Screen 6)
+      // Big Circle Pin Indicator
+      val iconTint = when (state.locationStatus) {
+        LocationStatus.LOCATION_AVAILABLE -> Color(0xFF00C853)
+        LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.error
+      }
+      val iconBg = when (state.locationStatus) {
+        LocationStatus.LOCATION_AVAILABLE -> Color(0xFF00C853).copy(alpha = 0.15f)
+        LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+        else -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+      }
+      val iconBorder = when (state.locationStatus) {
+        LocationStatus.LOCATION_AVAILABLE -> Color(0xFF00C853).copy(alpha = 0.4f)
+        LocationStatus.LOCATION_LOADING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        else -> MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+      }
+
       Box(
         modifier = Modifier
           .size(96.dp)
           .clip(CircleShape)
-          .background(
-            if (isLocationAvailable) Color(0xFF00C853).copy(alpha = 0.15f)
-            else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
-          )
-          .border(
-            width = 2.dp,
-            color = if (isLocationAvailable) Color(0xFF00C853).copy(alpha = 0.4f)
-            else MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
-            shape = CircleShape
-          ),
+          .background(iconBg)
+          .border(width = 2.dp, color = iconBorder, shape = CircleShape),
         contentAlignment = Alignment.Center
       ) {
         Icon(
-          imageVector = if (isLocationAvailable) Icons.Default.LocationOn else Icons.Default.Warning,
+          imageVector = if (isLocationAvailable) Icons.Default.LocationOn else Icons.Default.GpsFixed,
           contentDescription = null,
-          tint = if (isLocationAvailable) Color(0xFF00C853) else MaterialTheme.colorScheme.error,
+          tint = iconTint,
           modifier = Modifier.size(52.dp)
         )
       }
 
       Spacer(modifier = Modifier.height(16.dp))
 
+      val statusTitle = when (state.locationStatus) {
+        LocationStatus.LOCATION_AVAILABLE -> "GPS aktif"
+        LocationStatus.LOCATION_LOADING -> "Mencari sinyal GPS..."
+        LocationStatus.LOCATION_PROVIDER_DISABLED -> "GPS nonaktif"
+        LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED -> "Izin lokasi belum diberikan"
+        else -> "Status Lokasi"
+      }
+      val statusSubtitle = when (state.locationStatus) {
+        LocationStatus.LOCATION_AVAILABLE -> "Perangkat berhasil memperoleh lokasi secara akurat."
+        LocationStatus.LOCATION_LOADING -> "Sedang mencari sinyal GPS dari sensor perangkat..."
+        LocationStatus.LOCATION_PROVIDER_DISABLED -> "Layanan GPS perangkat nonaktif. Aktifkan GPS pada pengaturan perangkat."
+        LocationStatus.LOCATION_PERMISSION_REQUIRED, LocationStatus.LOCATION_PERMISSION_DENIED -> "Aplikasi memerlukan izin akses GPS nyata untuk menentukan posisi Anda."
+        else -> state.locationErrorMessage ?: "Aplikasi siap membaca GPS perangkat."
+      }
+
       Text(
-        text = if (isLocationAvailable) "Lokasi GPS Tersedia" else "Lokasi GPS Belum Tersedia",
+        text = statusTitle,
         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
         color = MaterialTheme.colorScheme.onSurface
       )
@@ -144,11 +168,7 @@ fun MyLocationScreen(
       Spacer(modifier = Modifier.height(6.dp))
 
       Text(
-        text = if (isLocationAvailable) {
-          "Perangkat berhasil memperoleh lokasi secara akurat."
-        } else {
-          state.locationErrorMessage ?: "Aplikasi memerlukan izin akses GPS nyata untuk menentukan posisi Anda."
-        },
+        text = statusSubtitle,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
@@ -157,7 +177,7 @@ fun MyLocationScreen(
 
       Spacer(modifier = Modifier.height(24.dp))
 
-      if (isLocationAvailable) {
+      if (isLocationAvailable && location != null) {
         // Info Card
         Card(
           modifier = Modifier.fillMaxWidth(),
@@ -199,19 +219,34 @@ fun MyLocationScreen(
             )
           }
         }
+      } else if (state.locationStatus == LocationStatus.LOCATION_PROVIDER_DISABLED) {
+        Button(
+          onClick = onOpenLocationSettings,
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .testTag("my_location_open_gps_settings_button"),
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+          shape = RoundedCornerShape(14.dp)
+        ) {
+          Icon(Icons.Default.GpsFixed, contentDescription = null)
+          Spacer(modifier = Modifier.width(8.dp))
+          Text("Buka Pengaturan Lokasi", fontWeight = FontWeight.Bold)
+        }
       } else {
         // Action to request permission
         Button(
           onClick = onRequestPermission,
           modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp),
+            .height(52.dp)
+            .testTag("my_location_request_permission_button"),
           colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
           shape = RoundedCornerShape(14.dp)
         ) {
           Icon(Icons.Default.GpsFixed, contentDescription = null)
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Aktifkan Izin Lokasi GPS", fontWeight = FontWeight.Bold)
+          Text("Minta Izin Lokasi", fontWeight = FontWeight.Bold)
         }
       }
 

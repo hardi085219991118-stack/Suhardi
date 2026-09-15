@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.core.fire.FireDataAgeCalculator
 import com.example.core.fire.FireDataCredentialState
+import com.example.core.fire.FireDataRecord
 import com.example.core.fire.FireDataRepository
 import com.example.core.fire.FireDataResponse
 import com.example.core.fire.FireDataSourceState
@@ -129,6 +130,29 @@ class DashboardViewModel(
     updateFilterCriteria(HotspotFilterCriteria())
   }
 
+  private fun resolveActiveSatelliteName(response: FireDataResponse, firstRecord: FireDataRecord?): String {
+    val satRecord = firstRecord?.satellite?.trim()
+    if (!satRecord.isNullOrBlank()) {
+      return when {
+        satRecord.contains("21") -> "NOAA-21"
+        satRecord.contains("20") -> "NOAA-20"
+        satRecord.contains("SNPP", ignoreCase = true) || satRecord.contains("Suomi", ignoreCase = true) -> "Suomi-NPP"
+        satRecord.contains("Terra", ignoreCase = true) -> "Terra"
+        satRecord.contains("Aqua", ignoreCase = true) -> "Aqua"
+        satRecord.contains("MODIS", ignoreCase = true) -> "MODIS"
+        else -> satRecord
+      }
+    }
+    val sensor = response.sourceSensor.trim()
+    return when {
+      sensor.contains("NOAA21", ignoreCase = true) || sensor.contains("NOAA-21", ignoreCase = true) -> "NOAA-21"
+      sensor.contains("NOAA20", ignoreCase = true) || sensor.contains("NOAA-20", ignoreCase = true) -> "NOAA-20"
+      sensor.contains("SNPP", ignoreCase = true) -> "Suomi-NPP"
+      sensor.contains("MODIS", ignoreCase = true) -> "MODIS"
+      else -> "Belum tersedia"
+    }
+  }
+
   private fun mapFireResponseToUiState(
     response: FireDataResponse,
     credState: FireDataCredentialState,
@@ -142,14 +166,16 @@ class DashboardViewModel(
     } else if (!firstRecord?.acqDate.isNullOrBlank()) {
       "${firstRecord?.acqDate} ${firstRecord?.acqTime} UTC"
     } else {
-      "BELUM TERSEDIA"
+      "Belum tersedia"
     }
 
     val formattedFetchTime = if (response.fetchTimeMillis > 0) {
       localTimeFormat.format(Date(response.fetchTimeMillis))
     } else {
-      "BELUM PERNAH"
+      "Belum pernah"
     }
+
+    val activeSatName = resolveActiveSatelliteName(response, firstRecord)
 
     val newState = when (sourceState) {
       FireDataSourceState.NOT_VERIFIED -> current.copy(
@@ -166,14 +192,14 @@ class DashboardViewModel(
         },
         fireRecords = emptyList(),
         satelliteState = DataState.NOT_VERIFIED,
-        satelliteDisplay = if (credState == FireDataCredentialState.CONFIGURED) "READY FOR LIVE REQUEST" else "BELUM TERSEDIA",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = if (credState == FireDataCredentialState.CONFIGURED) {
-          "NASA FIRMS: READY FOR LIVE REQUEST. Kredensial terdeteksi, siap mengirim live HTTPS request."
+          "NASA FIRMS: Siap mengirim live HTTPS request."
         } else {
           "DATA SOURCE NOT VERIFIED (MAP_KEY belum dikonfigurasi)."
         },
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         lastUpdateNote = "Waktu akuisisi satelit belum tersedia. Waktu perangkat tidak disamakan dengan waktu satelit (Aturan 7).",
         isLoadingSatellite = false
       )
@@ -187,18 +213,19 @@ class DashboardViewModel(
         responseSha256Hash = response.responseSha256Hash,
         fireCountDisplay = response.validRecordCount.toString(),
         fireStatusText = "DATA SOURCE AVAILABLE",
-        fireNote = "Ditemukan ${response.validRecordCount} deteksi titik api valid dari sensor ${response.sourceSensor}.",
+        fireNote = "Ditemukan ${response.validRecordCount} deteksi titik api valid dari satelit $activeSatName.",
         fireRecords = response.records,
         satelliteState = DataState.AVAILABLE,
-        satelliteDisplay = response.sourceSensor,
-        satelliteNote = "Sensor: ${response.sourceSensor} | Satelit: ${firstRecord?.satellite ?: "N/A"}",
+        satelliteDisplay = activeSatName,
+        satelliteNote = "Sensor: ${response.sourceSensor} | Satelit: $activeSatName",
         freshnessLevel = response.freshness,
         isCachedFireData = response.isCached,
         lastUpdateState = DataState.AVAILABLE,
         lastUpdateDisplay = formattedAcqTime,
         lastUpdateNote = "Waktu akuisisi satelit: $formattedAcqTime. Waktu fetch perangkat: $formattedFetchTime (TIDAK DISAMAKAN).",
         lastFetchDisplay = formattedFetchTime,
-        isLoadingSatellite = false
+        isLoadingSatellite = false,
+        refreshSatelliteNote = "Data berhasil diperbarui"
       )
 
       FireDataSourceState.NO_DETECTIONS_IN_QUERY -> current.copy(
@@ -210,18 +237,19 @@ class DashboardViewModel(
         responseSha256Hash = response.responseSha256Hash,
         fireCountDisplay = "0",
         fireStatusText = "NO DETECTIONS IN QUERY",
-        fireNote = "Tidak ada titik api terdeteksi dalam area query pada overpass satelit terakhir (${response.sourceSensor}).",
+        fireNote = "Tidak ada titik api terdeteksi dalam area query pada overpass satelit terakhir ($activeSatName).",
         fireRecords = emptyList(),
         satelliteState = DataState.AVAILABLE,
-        satelliteDisplay = response.sourceSensor,
+        satelliteDisplay = activeSatName,
         satelliteNote = "Sensor: ${response.sourceSensor} | Status: 0 Deteksi dalam query",
         freshnessLevel = FreshnessLevel.FRESHNESS_UNKNOWN,
         isCachedFireData = response.isCached,
         lastUpdateState = DataState.AVAILABLE,
-        lastUpdateDisplay = "0 DETEKSI",
+        lastUpdateDisplay = "0 Deteksi (Tidak Ada Titik Api)",
         lastUpdateNote = "Query valid berhasil dieksekusi. Tidak ada hotspot teramati. Waktu fetch: $formattedFetchTime.",
         lastFetchDisplay = formattedFetchTime,
-        isLoadingSatellite = false
+        isLoadingSatellite = false,
+        refreshSatelliteNote = "Data berhasil diperbarui"
       )
 
       FireDataSourceState.API_CREDENTIAL_REQUIRED -> current.copy(
@@ -238,10 +266,10 @@ class DashboardViewModel(
         },
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
-        satelliteDisplay = if (credState == FireDataCredentialState.INVALID) "INVALID CREDENTIAL" else "CREDENTIAL REQUIRED",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = "MAP_KEY FIRMS diperlukan untuk mengakses web service NASA.",
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         isLoadingSatellite = false
       )
 
@@ -255,10 +283,10 @@ class DashboardViewModel(
         fireNote = "Gagal menghubungi server NASA FIRMS. Periksa koneksi internet perangkat.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
-        satelliteDisplay = "NETWORK ERROR",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = "Koneksi internet terputus atau DNS gagal.",
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         isLoadingSatellite = false
       )
 
@@ -272,10 +300,10 @@ class DashboardViewModel(
         fireNote = "Waktu koneksi ke server NASA FIRMS habis (Timeout).",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
-        satelliteDisplay = "TIMEOUT",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = "Koneksi ke NASA FIRMS melebihi batas waktu.",
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         isLoadingSatellite = false
       )
 
@@ -289,10 +317,10 @@ class DashboardViewModel(
         fireNote = "Permintaan melebihi kuota NASA FIRMS. Cooldown dan backoff sedang aktif.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
-        satelliteDisplay = "RATE LIMITED",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = "HTTP 429 Too Many Requests dari NASA FIRMS.",
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         isLoadingSatellite = false
       )
 
@@ -306,10 +334,10 @@ class DashboardViewModel(
         fireNote = response.error?.message ?: "Server NASA FIRMS tidak dapat dihubungi.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
-        satelliteDisplay = "UNAVAILABLE",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = "Server NASA FIRMS mengalami gangguan.",
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         isLoadingSatellite = false
       )
 
@@ -323,10 +351,10 @@ class DashboardViewModel(
         fireNote = response.error?.message ?: "Payload CSV dari NASA FIRMS tidak valid.",
         fireRecords = emptyList(),
         satelliteState = DataState.ERROR,
-        satelliteDisplay = "INVALID NASA FIRMS RESPONSE",
+        satelliteDisplay = "Belum tersedia",
         satelliteNote = "Format respons tidak dikenali.",
         lastUpdateState = DataState.NOT_AVAILABLE,
-        lastUpdateDisplay = "BELUM TERSEDIA",
+        lastUpdateDisplay = "Belum tersedia",
         isLoadingSatellite = false
       )
 
@@ -334,8 +362,8 @@ class DashboardViewModel(
         fireDataSourceState = FireDataSourceState.CONNECTING,
         isLoadingSatellite = true,
         fireStatusText = "MENGHUBUNGI NASA FIRMS...",
-        satelliteDisplay = "MENGHUBUNGI NASA FIRMS...",
-        refreshSatelliteNote = "MENGHUBUNGI NASA FIRMS..."
+        satelliteDisplay = "Belum tersedia",
+        refreshSatelliteNote = "Menghubungkan ke NASA FIRMS..."
       )
 
       FireDataSourceState.CACHED -> current.copy(
@@ -348,7 +376,7 @@ class DashboardViewModel(
         fireNote = "Data cache tersimpan (${response.cacheAgeMillis / 1000}s lalu). BUKAN DATA LIVE.",
         fireRecords = response.records,
         satelliteState = DataState.AVAILABLE,
-        satelliteDisplay = "${response.sourceSensor} (CACHE)",
+        satelliteDisplay = "$activeSatName (Cache)",
         satelliteNote = "Menampilkan data lokal dari cache. Usia cache: ${response.cacheAgeMillis / 1000} detik.",
         freshnessLevel = response.freshness,
         isCachedFireData = true,
@@ -463,7 +491,7 @@ class DashboardViewModel(
       _uiState.value = _uiState.value.copy(
         cooldownRemainingSeconds = remainingSec,
         isRefreshSatelliteEnabled = false,
-        refreshSatelliteNote = "DATA BARU SAJA DIAMBIL. COOLDOWN: $remainingSec detik."
+        refreshSatelliteNote = "Data baru saja diperbarui. Tunggu sebelum memperbarui lagi."
       )
       startCooldownCountdown(remainingSec)
       return
@@ -498,7 +526,7 @@ class DashboardViewModel(
         _uiState.value = _uiState.value.copy(
           cooldownRemainingSeconds = remaining,
           isRefreshSatelliteEnabled = false,
-          refreshSatelliteNote = "DATA BARU SAJA DIAMBIL. COOLDOWN: $remaining detik."
+          refreshSatelliteNote = "Data baru saja diperbarui. Tunggu sebelum memperbarui lagi."
         )
         delay(1000L)
         remaining--
